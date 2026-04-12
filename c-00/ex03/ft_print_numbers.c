@@ -1,27 +1,21 @@
 #include <unistd.h>
 
+void	ft_print_numbers(void);
+
 void	ft_print_numbers(void)
 {
-	int number;
+	int n;
 	
-	int number_1;
-	int number_2;
-	
-	char ascii_number_1;
-	char ascii_number_2;
-	
-	number = 0;
-	while (number <= 23)
+	n = 0;
+	while (n < 10)
 	{
-		number_2 = (number % 10);
-		number_1 = number - number_2 ;
-		
-		ascii_number_1 = number_1 + '0';
-		ascii_number_2 = number_2 + '0';
+		// convert digit to ascii character
+		char c = n + '0';
 
-		write(1, &ascii_number_1, 1);
-		write(1, &ascii_number_2, 1);
-		write(1, "\n", 1);
-		number++;
+		// write ascii character
+		write(1, &c, 1);
+
+		// increment
+		n++;
 	}
 }
