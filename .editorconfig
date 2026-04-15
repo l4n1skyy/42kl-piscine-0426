@@ -1,8 +1,0 @@
-# Stop looking for other configs above this folder
-root = true
-
-# Apply strict 42 Norms to all C and Header files in this workspace
-[*.{c,h}]
-indent_style = tab
-indent_size = 4
-tab_width = 4

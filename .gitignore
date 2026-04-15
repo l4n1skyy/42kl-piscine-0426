@@ -1,0 +1,18 @@
+# 1. Ignore everything in the repository
+*
+
+# 2. Allow directories so Git can look inside them
+!*/
+
+# 3. Allow all .c files
+!*.c
+
+# 4. RE-IGNORE specific .c files you don't want (like testers)
+**/main.c
+
+# 5. Allow the .gitignore file itself
+!.gitignore
+
+# 6. Allow headers and Makefiles
+!*.h
+!Makefile

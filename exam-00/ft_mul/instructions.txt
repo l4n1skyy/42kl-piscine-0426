@@ -1,6 +1,0 @@
-Assignment name  : ft_mul
-Expected files   : ft_mul.c
-Allowed functions: write
---------------------------------------------------------------------------------
-
-Write a program that takes two arguments, a pointer to a number, and another number. It should change the value of the pointer to its value multiplied the second number.
