@@ -18,3 +18,7 @@ __pycache__/
 # --- OS Specific Junk ---
 .DS_Store
 Thumbs.db
+
+# Security / SSH Keys
+**/id_rsa_pub
+**/*.pub
