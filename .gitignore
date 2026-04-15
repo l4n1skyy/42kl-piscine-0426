@@ -16,3 +16,16 @@
 # 6. Allow headers and Makefiles
 !*.h
 !Makefile
+
+# --- Specific Folders to Push Entirely ---
+# Allow the folder itself
+!exam-00/
+!exam-01/
+!exam-02/
+!final-exam/
+
+# Allow everything inside the folder (including subfolders)
+!exam-00/**
+!exam-01/**
+!exam-02/**
+!final-exam/**
