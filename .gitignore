@@ -1,31 +1,20 @@
-# 1. Ignore everything in the repository
-*
+# --- Compiled Binaries & Output Files ---
+**/a.out
+**/*.o
+**/*.out
+**/*.gch
+**/*.app
 
-# 2. Allow directories so Git can look inside them
-!*/
+# --- Python & Environment Junk ---
+.venv/
+__pycache__/
+*.pyc
+.python-version
+.editorconfig
 
-# 3. Allow all .c files
-!*.c
-
-# 4. RE-IGNORE specific .c files you don't want (like testers)
+# --- Personal Testers (Optional but recommended for 42) ---
 **/main.c
 
-# 5. Allow the .gitignore file itself
-!.gitignore
-
-# 6. Allow headers and Makefiles
-!*.h
-!Makefile
-
-# --- Specific Folders to Push Entirely ---
-# Allow the folder itself
-!exam-00/
-!exam-01/
-!exam-02/
-!final-exam/
-
-# Allow everything inside the folder (including subfolders)
-!exam-00/**
-!exam-01/**
-!exam-02/**
-!final-exam/**
+# --- OS Specific Junk ---
+.DS_Store
+Thumbs.db
