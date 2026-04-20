@@ -1,4 +1,5 @@
 char	*ft_strupcase(char *str);
+int	is_alpha(char c);
 
 char	*ft_strupcase(char *str)
 {

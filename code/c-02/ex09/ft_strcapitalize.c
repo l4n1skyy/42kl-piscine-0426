@@ -10,7 +10,7 @@ char	*ft_strcapitalize(char *str)
 
 	i = 0;
 	if (!str)
-		return (NULL);
+		return (str);
 	while (str[i])
 	{
 		if (i != 0 && is_alphanumeric(str[i - 1]))
