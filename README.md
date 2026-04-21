@@ -8,7 +8,6 @@ Top level:
 - code/: main work area on this machine.
 - scripts/: automation scripts.
 - resources/: reference material.
-- prep-code: root launcher for scripts/prep-code.
 
 Inside code/:
 - c-00 to c-06: C piscine exercises.
@@ -43,19 +42,19 @@ scripts/prep-code
 
 Configure paths only (does not run scripts):
 ```bash
-./prep-code scripts=./scripts code=./code
-./prep-code scripts=./scripts code=./
+./scripts/prep-code scripts=./scripts code=./code
+./scripts/prep-code scripts=./scripts code=./
 ```
 
 Run with saved configuration:
 ```bash
-./prep-code
+./scripts/prep-code
 ```
 
 Run specific folders only:
 ```bash
-./prep-code c-01
-./prep-code c-01 c-02
+./scripts/prep-code c-01
+./scripts/prep-code c-01 c-02
 ```
 
 ## Structure Variants
@@ -70,5 +69,5 @@ Another machine example:
 
 For the second layout, configure once with:
 ```bash
-./prep-code scripts=./scripts code=./
+./scripts/prep-code scripts=./scripts code=./
 ```

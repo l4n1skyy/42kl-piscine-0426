@@ -387,26 +387,30 @@ if ! mapfile -t mains < <(find "$target_folder" -type f -name 'main.c' 2>/dev/nu
 fi
 
 processed=0
+declare -A dirs_with_external_main
 
 if [[ ${#mains[@]} -gt 0 ]]; then
 	for main_file in "${mains[@]}"; do
+		dirs_with_external_main["$(dirname "$main_file")"]=1
 		target_file="$(choose_target_for_main "$main_file")"
 		append_main_and_delete_main "$target_file" "$main_file"
 		processed=$((processed + 1))
 	done
 fi
 
-if [[ ${#mains[@]} -eq 0 ]]; then
-	if ! mapfile -t inline_main_files < <(find "$target_folder" -type f -name '*.c' ! -name 'main.c' | sort); then
-		die "failed to scan '$target_folder' for .c files."
-	fi
-	for target_file in "${inline_main_files[@]}"; do
-		if file_has_active_main "$target_file"; then
-			comment_main_in_file "$target_file"
-			processed=$((processed + 1))
-		fi
-	done
+if ! mapfile -t inline_main_files < <(find "$target_folder" -type f -name '*.c' ! -name 'main.c' | sort); then
+	die "failed to scan '$target_folder' for .c files."
 fi
+for target_file in "${inline_main_files[@]}"; do
+	exercise_dir="$(dirname "$target_file")"
+	if [[ -n "${dirs_with_external_main[$exercise_dir]+x}" ]]; then
+		continue
+	fi
+	if file_has_active_main "$target_file"; then
+		comment_main_in_file "$target_file"
+		processed=$((processed + 1))
+	fi
+done
 
 if [[ $processed -eq 0 ]]; then
 	die "no processable main() found under '$target_folder'."
