@@ -1,17 +1,17 @@
 #include <stdio.h>
 
-char	*ft_strncpy(char *dest, char *src, unsigned int n);
+char *ft_strncpy(char *dest, char *src, unsigned int n);
 
-int	main(void)
+int main(void)
 {
-	char	dest[10];
-	char	*src = "hello";
+    char src[] = "42";
+    char dest[32] = "xxxxx";
+    unsigned int n;
 
-	// Copy 5 bytes from "42" (which is only 2 chars + \0)
-	ft_strncpy(dest, src, 5);
-
-	// Print the result
-	printf("Result: %s\n", dest);
-
-	return (0);
+    n = 4;
+    printf("src = %s, n = %u\n", src, n);
+    printf("before dest = %s\n", dest);
+    ft_strncpy(dest, src, n);
+    printf("after dest = %s\n", dest);
+    return (0);
 }

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+base_dir="$(cd "$(dirname "$0")" && pwd)"
+runner="$base_dir/scripts/prep-code"
+
+if [[ ! -f "$runner" ]]; then
+    echo "Error: missing '$runner'." >&2
+    exit 1
+fi
+
+if [[ ! -x "$runner" ]]; then
+    echo "Error: '$runner' is not executable." >&2
+    exit 1
+fi
+
+exec "$runner" "$@"

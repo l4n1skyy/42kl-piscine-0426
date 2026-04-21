@@ -3,7 +3,7 @@
 /*                                                        :::      ::::::::   */
 /*   ft_putchar.c                                       :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: lanusri- <lanusri-@student.42kl.edu.my     +#+  +:+       +#+        */
+/*   By: lanusri- <lanusri-@student.42kl.edu.my>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/04/12 13:07:51 by lanusri-          #+#    #+#             */
 /*   Updated: 2026/04/12 13:21:24 by lanusri-         ###   ########.fr       */

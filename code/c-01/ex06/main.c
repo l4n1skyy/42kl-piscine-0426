@@ -1,9 +1,9 @@
 #include <stdio.h>
 
-int	ft_strlen(char *str);
+int ft_strlen(char *str);
 
-int	main(void) {
-	char* str = "test";
-	int len = ft_strlen(str);
-	printf("%d", len);
+int main(void)
+{
+    printf("len = %d\n", ft_strlen("Piscine"));
+    return (0);
 }

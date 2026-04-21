@@ -1,13 +1,15 @@
 #include <stdio.h>
 
-char	*ft_strcpy(char *dest, char *src);
+char *ft_strcpy(char *dest, char *src);
 
-int	main(void)
+int main(void)
 {
-	char *src = "test";
-	char dest[50];
-	
-	ft_strcpy(dest, src);
+    char src[] = "hello";
+    char dest[32] = "xxxxx";
 
-	printf("src: %s, dest: %s", src, dest);
+    printf("src = %s\n", src);
+    printf("before dest = %s\n", dest);
+    ft_strcpy(dest, src);
+    printf("after dest = %s\n", dest);
+    return (0);
 }
