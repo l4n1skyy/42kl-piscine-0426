@@ -12,9 +12,6 @@ __pycache__/
 .python-version
 .editorconfig
 
-# --- Personal Testers (Optional but recommended for 42) ---
-**/main.c
-
 # --- OS Specific Junk ---
 .DS_Store
 Thumbs.db
