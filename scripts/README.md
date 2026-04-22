@@ -8,9 +8,17 @@ Use `prep-code` to run all the scripts at once in correct order.
 
 First configure your paths (one time thing):
 ```bash
-./scripts/prep-code scripts=./scripts code=./code
+./scripts/prep-code scripts=./scripts code=./code username=lanusri- email=lanusri-@student.42kl.edu.my
 ./scripts/prep-code scripts=./scripts code=./
 ```
+
+This writes a shared config file at:
+- `scripts/prep.config`
+
+`prep-header` reads `username` and `email` from this config and formats:
+- `By: username <email>`
+
+The email is always normalized to include angle brackets (`<` and `>`).
 
 After that, run it without repeating the path setup:
 ```bash
@@ -21,7 +29,7 @@ After that, run it without repeating the path setup:
 
 You can also configure once and then run individual scripts directly:
 ```bash
-./scripts/prep-x scripts=./scripts code=./code
+./scripts/prep-x scripts=./scripts code=./code username=lanusri- email=lanusri-@student.42kl.edu.my
 ./scripts/prep-x c-01
 ```
 

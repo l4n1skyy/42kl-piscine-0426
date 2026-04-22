@@ -9,11 +9,11 @@ die() {
 
 usage() {
     echo "Usage:" >&2
-    echo "  $0 scripts=<path> code=<path>" >&2
+    echo "  $0 scripts=<path> code=<path> [username=<login> email=<address>]" >&2
     echo "  $0 [c-01 c-02 ...]" >&2
     echo "" >&2
     echo "Examples:" >&2
-    echo "  $0 scripts=./scripts code=./code" >&2
+    echo "  $0 scripts=./scripts code=./code username=lanusri- email=lanusri-@student.42kl.edu.my" >&2
     echo "  $0 scripts=./scripts code=./" >&2
     echo "  $0" >&2
     echo "  $0 c-01 c-02" >&2
@@ -28,7 +28,7 @@ for cmd in find grep pwd sort; do
 done
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-config_file="$script_dir/.prep-code.conf"
+config_file="$script_dir/prep.config"
 
 abs_dir() {
     local p="$1"
@@ -67,10 +67,18 @@ load_config() {
 write_config() {
     local scripts_path="$1"
     local code_path="$2"
+    local username="$3"
+    local email="$4"
 
     {
         printf 'SCRIPTS_DIR=%q\n' "$scripts_path"
         printf 'CODE_DIR=%q\n' "$code_path"
+        if [[ -n "$username" ]]; then
+            printf 'PREP_USERNAME=%q\n' "$username"
+        fi
+        if [[ -n "$email" ]]; then
+            printf 'PREP_EMAIL=%q\n' "$email"
+        fi
     } > "$config_file"
 }
 
@@ -103,9 +111,18 @@ is_config_mode() {
 configure_only() {
     local scripts_path=""
     local code_path=""
+    local username=""
+    local email=""
     local key
     local value
     local arg
+
+    if [[ -f "$config_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$config_file"
+        username="${PREP_USERNAME:-}"
+        email="${PREP_EMAIL:-}"
+    fi
 
     for arg in "$@"; do
         key="${arg%%=*}"
@@ -117,8 +134,14 @@ configure_only() {
             code)
                 code_path="$(resolve_dir_arg "$value")" || die "invalid code directory '$value'."
                 ;;
+            username)
+                username="$value"
+                ;;
+            email)
+                email="$value"
+                ;;
             *)
-                die "unknown configuration key '$key'. Supported keys: scripts, code."
+                die "unknown configuration key '$key'. Supported keys: scripts, code, username, email."
                 ;;
         esac
     done
@@ -134,11 +157,17 @@ configure_only() {
     [[ -d "$scripts_path" ]] || die "scripts directory '$scripts_path' does not exist."
     [[ -d "$code_path" ]] || die "code directory '$code_path' does not exist."
 
-    write_config "$scripts_path" "$code_path"
+    write_config "$scripts_path" "$code_path" "$username" "$email"
 
     echo "Configuration saved in '$config_file'."
     echo "scripts=$scripts_path"
     echo "code=$code_path"
+    if [[ -n "$username" ]]; then
+        echo "username=$username"
+    fi
+    if [[ -n "$email" ]]; then
+        echo "email=$email"
+    fi
     echo "No scripts were executed."
 }
 

@@ -14,7 +14,7 @@ warn() {
 usage() {
     echo "Usage: $0 [scripts=<path> code=<path>] <folder>" >&2
     echo "Examples:" >&2
-    echo "  $0 scripts=./scripts code=./code" >&2
+    echo "  $0 scripts=./scripts code=./code username=lanusri- email=lanusri-@student.42kl.edu.my" >&2
     echo "  $0 c-01" >&2
 }
 
@@ -23,7 +23,7 @@ require_cmd() {
 }
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-config_file="$script_dir/.prep-code.conf"
+config_file="$script_dir/prep.config"
 
 tmp_files=()
 
@@ -92,19 +92,36 @@ load_config() {
 write_config() {
     local scripts_path="$1"
     local code_path="$2"
+    local username="$3"
+    local email="$4"
 
     {
         printf 'SCRIPTS_DIR=%q\n' "$scripts_path"
         printf 'CODE_DIR=%q\n' "$code_path"
+        if [[ -n "$username" ]]; then
+            printf 'PREP_USERNAME=%q\n' "$username"
+        fi
+        if [[ -n "$email" ]]; then
+            printf 'PREP_EMAIL=%q\n' "$email"
+        fi
     } > "$config_file"
 }
 
 configure_only() {
     local scripts_path="$script_dir"
     local code_path=""
+    local username=""
+    local email=""
     local key
     local value
     local arg
+
+    if [[ -f "$config_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$config_file"
+        username="${PREP_USERNAME:-}"
+        email="${PREP_EMAIL:-}"
+    fi
 
     for arg in "$@"; do
         key="${arg%%=*}"
@@ -116,8 +133,14 @@ configure_only() {
             code)
                 code_path="$(resolve_dir_arg "$value")" || die "invalid code directory '$value'."
                 ;;
+            username)
+                username="$value"
+                ;;
+            email)
+                email="$value"
+                ;;
             *)
-                die "unknown configuration key '$key'. Supported keys: scripts, code."
+                die "unknown configuration key '$key'. Supported keys: scripts, code, username, email."
                 ;;
         esac
     done
@@ -125,12 +148,26 @@ configure_only() {
     [[ -d "$scripts_path" ]] || die "scripts directory '$scripts_path' does not exist."
     [[ -d "$code_path" ]] || die "code directory '$code_path' does not exist."
 
-    write_config "$scripts_path" "$code_path"
+    write_config "$scripts_path" "$code_path" "$username" "$email"
 
     echo "Configuration saved in '$config_file'."
     echo "scripts=$scripts_path"
     echo "code=$code_path"
+    if [[ -n "$username" ]]; then
+        echo "username=$username"
+    fi
+    if [[ -n "$email" ]]; then
+        echo "email=$email"
+    fi
     echo "No scripts were executed."
+}
+
+normalize_email() {
+    local v="$1"
+
+    v="${v#<}"
+    v="${v%>}"
+    printf '<%s>\n' "$v"
 }
 
 extract_by_value() {
@@ -171,9 +208,18 @@ resolve_by_value() {
     local target_dir="$1"
     local sample
     local found
+    local cfg_user
+    local cfg_email
 
     if [[ -n "${HEADER_BY:-}" ]]; then
         printf '%s\n' "$HEADER_BY"
+        return
+    fi
+
+    cfg_user="${PREP_USERNAME:-}"
+    cfg_email="${PREP_EMAIL:-}"
+    if [[ -n "$cfg_user" && -n "$cfg_email" ]]; then
+        printf '%s %s\n' "$cfg_user" "$(normalize_email "$cfg_email")"
         return
     fi
 
