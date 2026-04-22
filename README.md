@@ -1,6 +1,6 @@
 # 42kl-piscine-0426
 
-This repository contains 42 Piscine practice work and helper scripts.
+This is just my personal code and other useful resources I used for my piscine! :P
 
 ## Current Folder Organization
 
