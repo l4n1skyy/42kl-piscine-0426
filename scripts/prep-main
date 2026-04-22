@@ -275,7 +275,6 @@ append_main_and_delete_main() {
 
 	cat "$target_file" > "$tmp_target" || die "failed to read '$target_file'."
 	if ! {
-		printf "\n\n"
 		printf "/*\n"
 		sed 's/^/* /' "$tmp_main"
 		printf "*/\n"
