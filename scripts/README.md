@@ -4,7 +4,7 @@ This folder contains helper scripts for preparing 42 Piscine files.
 
 ## How To Use
 
-Run the combined pipeline:
+Use `prep-code` for the full pipeline. Pick the command that matches your folder layout:
 ```bash
 ./scripts/prep-code scripts=./scripts code=./code
 ./scripts/prep-code scripts=./scripts code=./
@@ -13,7 +13,9 @@ Run the combined pipeline:
 ./scripts/prep-code c-01 c-02
 ```
 
-Run individual scripts:
+The `CODE_ROOT=./code` prefix below is only needed when you run an individual script directly and your exercise folders live under `code/`.
+
+Run individual scripts directly if you want one step only:
 ```bash
 ./scripts/prep-main c-01
 ./scripts/prep-files c-01
