@@ -25,7 +25,7 @@ You can also configure once and then run individual scripts directly:
 
 ## What The Scripts Handle
 - `prep-code`
-  - runs the pipeline in order: `prep-main`, `prep-files`, `prep-header`.
+  - master script that runs the other scripts in order: `prep-main`, `prep-files`, `prep-header`.
 - `prep-main`
   - moves `main()` out of `main.c` into the target exercise file as a plain block comment
   - comments an in-file `main()` when needed.
