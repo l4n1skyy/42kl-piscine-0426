@@ -4,25 +4,31 @@ This folder contains helper scripts for preparing 42 Piscine files.
 
 ## How To Use
 
-Use `prep-code` for the full pipeline.
+Use `prep-code` for the full pipeline. First save your paths, then run the script normally.
 ```bash
 ./scripts/prep-code scripts=./scripts code=./code
 ./scripts/prep-code scripts=./scripts code=./
+```
+
+After that, run the pipeline without repeating the path setup:
+```bash
 ./scripts/prep-code
 ./scripts/prep-code c-01
 ./scripts/prep-code c-01 c-02
 ```
 
-If your exercise folders live under `code/`, set the root once in your shell first:
+You can also configure once and then run individual scripts directly:
 ```bash
-export CODE_ROOT=./code
-```
-
-Run individual scripts directly if you want one step only:
-```bash
+./scripts/prep-main scripts=./scripts code=./code
 ./scripts/prep-main c-01
+
+./scripts/prep-files scripts=./scripts code=./code
 ./scripts/prep-files c-01
+
+./scripts/prep-header scripts=./scripts code=./code
 ./scripts/prep-header c-01
+
+./scripts/prep-norminette scripts=./scripts code=./code
 ./scripts/prep-norminette c-01
 ```
 
