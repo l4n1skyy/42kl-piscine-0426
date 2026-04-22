@@ -219,7 +219,7 @@ function emit(s) {
 			emit("/*");
 		}
 	if (capture) {
-		emit("* " $0);
+		emit($0);
 		line = $0;
 		open_count = gsub(/\{/, "{", line);
 		line = $0;
@@ -390,7 +390,7 @@ END {
 	fi
 	if ! {
 		printf "/*\n"
-		sed 's/^/* /' "$tmp_main"
+		cat "$tmp_main"
 		printf "*/\n"
 	} >> "$tmp_target"; then
 		die "failed to append commented main to temporary output."

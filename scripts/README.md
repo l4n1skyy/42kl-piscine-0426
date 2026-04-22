@@ -35,7 +35,7 @@ You can also configure once and then run individual scripts directly:
 ## What The Scripts Handle
 - `prep-code` runs the pipeline in order: `prep-main`, `prep-files`, `prep-header`.
 - `prep-main`
-  - moves `main()` out of `main.c` into the target exercise file as a block comment
+  - moves `main()` out of `main.c` into the target exercise file as a plain block comment
   - comments an in-file `main()` when needed.
 - `prep-files` removes generated `main.c`, `a.out`, and `*.pdf` files under the target folder.
 - `prep-header` adds or refreshes the 42-style header in `.c` files.
