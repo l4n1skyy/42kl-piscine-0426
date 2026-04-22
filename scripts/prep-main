@@ -118,15 +118,22 @@ BEGIN {
 	depth = 0;
 	saw_open = 0;
 	done = 0;
+	skip_after = 0;
+	out_count = 0;
+}
+function emit(s) {
+	out[++out_count] = s;
 }
 {
 	if (!capture && !done && $0 ~ /^[[:space:]]*int[[:space:]]+main[[:space:]]*[(]/)
 		{
+			while (out_count > 0 && out[out_count] ~ /^[[:space:]]*$/)
+				out_count--;
 			capture = 1;
-			print "/*";
+			emit("/*");
 		}
 	if (capture) {
-		print "* " $0;
+		emit("* " $0);
 		line = $0;
 		open_count = gsub(/\{/, "{", line);
 		line = $0;
@@ -135,17 +142,25 @@ BEGIN {
 		if (open_count > 0)
 			saw_open = 1;
 		if (saw_open && depth == 0) {
-			print "*/";
+			emit("*/");
 			capture = 0;
 			done = 1;
+			skip_after = 1;
 		}
 		next;
 	}
-	print;
+	if (skip_after) {
+		if ($0 ~ /^[[:space:]]*$/)
+			next;
+		skip_after = 0;
+	}
+	emit($0);
 }
 END {
 	if (!done)
 		exit 1;
+	for (i = 1; i <= out_count; i++)
+		print out[i];
 }
 ' "$target_file" > "$tmp_target"; then
 		die "failed to comment out main() in '$target_file'."
@@ -273,12 +288,24 @@ append_main_and_delete_main() {
 	tmp_target="$(mktemp)" || die "failed to create temporary output file."
 	tmp_files+=("$tmp_target")
 
-	cat "$target_file" > "$tmp_target" || die "failed to read '$target_file'."
+	if ! awk '
+{
+	lines[NR] = $0;
+}
+END {
+	last = NR;
+	while (last > 0 && lines[last] ~ /^[[:space:]]*$/)
+		last--;
+	for (i = 1; i <= last; i++)
+		print lines[i];
+}
+' "$target_file" > "$tmp_target"; then
+		die "failed to read '$target_file'."
+	fi
 	if ! {
 		printf "/*\n"
 		sed 's/^/* /' "$tmp_main"
 		printf "*/\n"
-		printf "\n"
 	} >> "$tmp_target"; then
 		die "failed to append commented main to temporary output."
 	fi

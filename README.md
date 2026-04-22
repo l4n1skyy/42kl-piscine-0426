@@ -27,6 +27,7 @@ scripts/prep-norminette
   1) removes trailing spaces/tabs
   2) normalizes CRLF line endings to LF
   3) converts leading groups of 4 spaces to tabs
+  4) strips unneeded spacing at line ends around `;`, `{`, and `}`
 - It does not attempt non-whitespace refactors.
 
 scripts/prep-header

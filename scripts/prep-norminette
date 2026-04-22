@@ -101,6 +101,11 @@ BEGIN {
     sub(/\r$/, "", line);
     sub(/[ \t]+$/, "", line);
 
+    # Normalize line-end spacing around common delimiters.
+    sub(/[ \t]*;[ \t]*$/, ";", line);
+    sub(/[ \t]*\{[ \t]*$/, "{", line);
+    sub(/[ \t]*\}[ \t]*$/, "}", line);
+
     indent = "";
     while (substr(line, 1, 4) == "    ") {
         indent = indent "\t";
@@ -155,6 +160,8 @@ BEGIN {
             line = left " = " right;
         }
     }
+
+    sub(/[ \t]+$/, "", line);
 
     out = indent line;
 
