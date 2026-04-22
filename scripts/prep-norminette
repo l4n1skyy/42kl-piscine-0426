@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+die() {
+    echo "Error: $*" >&2
+    exit 1
+}
+
+warn() {
+    echo "Warning: $*" >&2
+}
+
+usage() {
+    echo "Usage: $0 <folder>" >&2
+    echo "Examples:" >&2
+    echo "  $0 c-01" >&2
+    echo "  CODE_ROOT=./code $0 c-01" >&2
+}
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || die "required command '$1' not found."
+}
+
+tmp_files=()
+
+cleanup() {
+    local f
+
+    for f in "${tmp_files[@]:-}"; do
+        if [[ -n "$f" && -e "$f" ]]; then
+            rm -f "$f"
+        fi
+    done
+}
+
+trap cleanup EXIT
+
+for cmd in awk cat chmod cmp dirname find mktemp mv pwd sort; do
+    require_cmd "$cmd"
+done
+
+abs_dir() {
+    local p="$1"
+
+    [[ -d "$p" ]] || return 1
+    (cd "$p" && pwd)
+}
+
+resolve_target_dir() {
+    local input_path="$1"
+
+    if [[ "$input_path" == /* && -d "$input_path" ]]; then
+        abs_dir "$input_path" || die "failed to resolve '$input_path'."
+        return
+    fi
+
+    if [[ -d "$code_root/$input_path" ]]; then
+        abs_dir "$code_root/$input_path" || die "failed to resolve '$code_root/$input_path'."
+        return
+    fi
+
+    if [[ -d "$input_path" ]]; then
+        abs_dir "$input_path" || die "failed to resolve '$input_path'."
+        return
+    fi
+
+    die "folder '$input_path' not found."
+}
+
+normalize_file() {
+    local file_path="$1"
+    local tmp_out
+
+    if [[ ! -r "$file_path" ]]; then
+        warn "skipping unreadable file '$file_path'."
+        return 2
+    fi
+    if [[ ! -w "$file_path" ]]; then
+        warn "skipping unwritable file '$file_path'."
+        return 2
+    fi
+    if [[ ! -w "$(dirname "$file_path")" ]]; then
+        warn "skipping '$file_path' because its directory is not writable."
+        return 2
+    fi
+
+    tmp_out="$(mktemp)" || {
+        warn "failed to create temporary file for '$file_path'."
+        return 2
+    }
+    tmp_files+=("$tmp_out")
+
+    if ! awk '
+BEGIN {
+    brace_depth = 0;
+    decl_block = 0;
+}
+{
+    line = $0;
+    sub(/\r$/, "", line);
+    sub(/[ \t]+$/, "", line);
+
+    indent = "";
+    while (substr(line, 1, 4) == "    ") {
+        indent = indent "\t";
+        line = substr(line, 5);
+    }
+
+    if (line ~ /\(/ \
+        && line !~ /^[[:space:]]*#/ \
+        && line !~ /^[[:space:]]*\/\// \
+        && line !~ /^[[:space:]]*\*/ \
+        && line !~ /^[[:space:]]*(if|while|for|switch|return|sizeof)\b/) {
+        open_pos = index(line, "(");
+        if (open_pos > 1) {
+            pre = substr(line, 1, open_pos - 1);
+            post = substr(line, open_pos);
+            if (pre ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[ ]+[A-Za-z_][A-Za-z0-9_]*$/) {
+                fname = pre;
+                sub(/^.*[ ]/, "", fname);
+                base = pre;
+                sub(/[ ]+[A-Za-z_][A-Za-z0-9_]*$/, "", base);
+                pre = base "\t" fname;
+                line = pre post;
+            }
+        }
+    }
+
+    if (line !~ /^[[:space:]]*#/ \
+        && line !~ /^[[:space:]]*\/\// \
+        && line !~ /^[[:space:]]*\*/ \
+        && line !~ /\(/ \
+        && line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[ ]+[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/) {
+        vname = line;
+        sub(/^.*[ ]/, "", vname);
+        sub(/(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/, "", vname);
+        base = line;
+        sub(/[ ]+[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/, "", base);
+        rest = line;
+        sub(/^.*[ ]+[A-Za-z_][A-Za-z0-9_]*/, "", rest);
+        line = base "\t" vname rest;
+    }
+
+    if (line !~ /^[[:space:]]*#/ \
+        && line !~ /"/ \
+        && line !~ /==|!=|<=|>=/ \
+        && line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_\[\]\->\.]*[[:space:]]*=[^=].*;[[:space:]]*$/) {
+        eq = index(line, "=");
+        if (eq > 0) {
+            left = substr(line, 1, eq - 1);
+            right = substr(line, eq + 1);
+            sub(/[[:space:]]+$/, "", left);
+            sub(/^[[:space:]]+/, "", right);
+            line = left " = " right;
+        }
+    }
+
+    out = indent line;
+
+    is_blank = (out ~ /^[[:space:]]*$/);
+    is_comment = (out ~ /^[[:space:]]*\/\// || out ~ /^[[:space:]]*\/\*/ || out ~ /^[[:space:]]*\*/);
+    is_decl = 0;
+
+    if (brace_depth > 0 \
+        && out !~ /\(/ \
+        && out !~ /^[[:space:]]*#/ \
+        && out !~ /^[[:space:]]*(return|if|while|for|switch)\b/ \
+        && out ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/) {
+        is_decl = 1;
+    }
+
+    if (brace_depth > 0 && decl_block == 1 && !is_blank && !is_decl && !is_comment) {
+        print "";
+        decl_block = 0;
+    }
+
+    print out;
+
+    if (brace_depth > 0) {
+        if (is_decl)
+            decl_block = 1;
+        else if (!is_blank && !is_comment)
+            decl_block = 0;
+    } else {
+        decl_block = 0;
+    }
+
+    tmp = out;
+    opens = gsub(/\{/, "{", tmp);
+    tmp = out;
+    closes = gsub(/\}/, "}", tmp);
+    brace_depth += opens - closes;
+    if (brace_depth < 0)
+        brace_depth = 0;
+}
+' "$file_path" > "$tmp_out"; then
+        warn "failed to normalize '$file_path'."
+        return 2
+    fi
+
+    if cmp -s "$file_path" "$tmp_out"; then
+        return 1
+    fi
+
+    if ! chmod --reference="$file_path" "$tmp_out"; then
+        warn "failed to preserve permissions for '$file_path'."
+        return 2
+    fi
+
+    if ! mv "$tmp_out" "$file_path"; then
+        warn "failed to replace '$file_path'."
+        return 2
+    fi
+
+    return 0
+}
+
+if [[ $# -ne 1 ]]; then
+    usage
+    exit 1
+fi
+
+input="$1"
+[[ -n "$input" ]] || {
+    usage
+    exit 1
+}
+
+code_root_raw="${CODE_ROOT:-$PWD}"
+code_root="$(abs_dir "$code_root_raw")" || die "CODE_ROOT '$code_root_raw' is not a readable directory."
+
+target_dir="$(resolve_target_dir "$input")"
+[[ -r "$target_dir" ]] || die "folder '$target_dir' is not readable."
+
+if ! mapfile -t code_files < <(find "$target_dir" -type f \( -name '*.c' -o -name '*.h' \) | sort); then
+    die "failed to scan '$target_dir' for .c/.h files."
+fi
+
+if [[ ${#code_files[@]} -eq 0 ]]; then
+    die "no .c/.h files found under '$target_dir'."
+fi
+
+scanned=0
+changed=0
+failed=0
+
+for file_path in "${code_files[@]}"; do
+    scanned=$((scanned + 1))
+    if normalize_file "$file_path"; then
+        changed=$((changed + 1))
+    else
+        rc=$?
+        if [[ $rc -eq 2 ]]; then
+            failed=$((failed + 1))
+        fi
+    fi
+done
+
+if ((failed > 0)); then
+    die "whitespace normalization changed $changed file(s), failed for $failed file(s), scanned $scanned file(s)."
+fi
+
+echo "Whitespace normalization changed $changed file(s), scanned $scanned file(s)."

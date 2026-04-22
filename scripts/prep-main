@@ -121,9 +121,12 @@ BEGIN {
 }
 {
 	if (!capture && !done && $0 ~ /^[[:space:]]*int[[:space:]]+main[[:space:]]*[(]/)
-		capture = 1;
+		{
+			capture = 1;
+			print "/*";
+		}
 	if (capture) {
-		print "  // " $0;
+		print "* " $0;
 		line = $0;
 		open_count = gsub(/\{/, "{", line);
 		line = $0;
@@ -132,6 +135,7 @@ BEGIN {
 		if (open_count > 0)
 			saw_open = 1;
 		if (saw_open && depth == 0) {
+			print "*/";
 			capture = 0;
 			done = 1;
 		}
@@ -150,7 +154,7 @@ END {
 	chmod --reference="$target_file" "$tmp_target" || die "failed to preserve permissions for '$target_file'."
 	mv "$tmp_target" "$target_file" || die "failed to update '$target_file'."
 
-	echo "Commented in-file main() in '$target_file'."
+	echo "Block-commented in-file main() in '$target_file'."
 }
 
 choose_target_for_main() {
@@ -272,7 +276,9 @@ append_main_and_delete_main() {
 	cat "$target_file" > "$tmp_target" || die "failed to read '$target_file'."
 	if ! {
 		printf "\n\n"
-		sed 's/^/  \/\/ /' "$tmp_main"
+		printf "/*\n"
+		sed 's/^/* /' "$tmp_main"
+		printf "*/\n"
 		printf "\n"
 	} >> "$tmp_target"; then
 		die "failed to append commented main to temporary output."
@@ -282,7 +288,7 @@ append_main_and_delete_main() {
 	mv "$tmp_target" "$target_file" || die "failed to update '$target_file'."
 	rm -f "$main_file" || die "failed to delete '$main_file'."
 
-	echo "Appended commented main to '$target_file' and deleted '$main_file'."
+	echo "Appended block-commented main to '$target_file' and deleted '$main_file'."
 }
 
 process_target_file() {
