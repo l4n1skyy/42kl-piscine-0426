@@ -1,8 +1,6 @@
 int	ft_str_is_printable(char *str);
 int	is_printable(char c);
 
-// printable chars, str empty -> return 1
-// other -> 0
 int	ft_str_is_printable(char *str)
 {
 	if (!str)

@@ -5,8 +5,6 @@ char	*ft_strlowcase(char *str)
 {
 	char	*str_ptr;
 	
-	if (!str)
-		return (NULL);
 	str_ptr = str;
 	while (*str)
 	{

@@ -5,8 +5,6 @@ char	*ft_strupcase(char *str)
 {
 	char	*str_ptr;
 	
-	if (!str)
-		return (NULL);
 	str_ptr = str;
 	while (*str)
 	{
