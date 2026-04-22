@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+die() {
+	echo "Error: $*" >&2
+	exit 1
+}
+
+usage() {
+	echo "Usage: $0 <folder>" >&2
+	echo "Examples:" >&2
+	echo "  $0 c-01" >&2
+	echo "  CODE_ROOT=./code $0 c-01" >&2
+}
+
+require_cmd() {
+	command -v "$1" >/dev/null 2>&1 || die "required command '$1' not found."
+}
+
+for cmd in find rm pwd; do
+	require_cmd "$cmd"
+done
+
+abs_dir() {
+	local p="$1"
+
+	[[ -d "$p" ]] || return 1
+	(cd "$p" && pwd)
+}
+
+resolve_target_dir() {
+	local input_path="$1"
+
+	if [[ "$input_path" == /* && -d "$input_path" ]]; then
+		abs_dir "$input_path" || die "failed to resolve '$input_path'."
+		return
+	fi
+
+	if [[ -d "$code_root/$input_path" ]]; then
+		abs_dir "$code_root/$input_path" || die "failed to resolve '$code_root/$input_path'."
+		return
+	fi
+
+	if [[ -d "$input_path" ]]; then
+		abs_dir "$input_path" || die "failed to resolve '$input_path'."
+		return
+	fi
+
+	die "folder '$input_path' not found."
+}
+
+cleanup_tree() {
+	local target_dir="$1"
+	local removed_main=0
+	local removed_pdf=0
+	local removed_aout=0
+	local file
+	local file_dir
+
+	while IFS= read -r -d '' file; do
+		file_dir="$(dirname "$file")"
+		[[ -w "$file_dir" && -x "$file_dir" ]] || die "folder '$file_dir' is not writable."
+		rm -f "$file"
+		removed_main=$((removed_main + 1))
+	done < <(find "$target_dir" -type f -name 'main.c' -print0)
+
+	while IFS= read -r -d '' file; do
+		file_dir="$(dirname "$file")"
+		[[ -w "$file_dir" && -x "$file_dir" ]] || die "folder '$file_dir' is not writable."
+		rm -f "$file"
+		removed_pdf=$((removed_pdf + 1))
+	done < <(find "$target_dir" -type f -name '*.pdf' -print0)
+
+	while IFS= read -r -d '' file; do
+		file_dir="$(dirname "$file")"
+		[[ -w "$file_dir" && -x "$file_dir" ]] || die "folder '$file_dir' is not writable."
+		rm -f "$file"
+		removed_aout=$((removed_aout + 1))
+	done < <(find "$target_dir" -type f -name 'a.out' -print0)
+
+	echo "Removed $removed_main main.c file(s), $removed_aout a.out file(s), and $removed_pdf pdf file(s) under '$target_dir'."
+}
+
+if [[ $# -ne 1 ]]; then
+	usage
+	exit 1
+fi
+
+input="$1"
+[[ -n "$input" ]] || {
+	usage
+	exit 1
+}
+
+code_root_raw="${CODE_ROOT:-$PWD}"
+code_root="$(abs_dir "$code_root_raw")" || die "CODE_ROOT '$code_root_raw' is not a readable directory."
+
+target_dir="$(resolve_target_dir "$input")"
+[[ -r "$target_dir" ]] || die "folder '$target_dir' is not readable."
+[[ -w "$target_dir" && -x "$target_dir" ]] || die "folder '$target_dir' is not writable."
+
+cleanup_tree "$target_dir"

@@ -71,6 +71,7 @@ resolve_target_dir() {
 normalize_file() {
     local file_path="$1"
     local tmp_out
+    local tmp_split
 
     if [[ ! -r "$file_path" ]]; then
         warn "skipping unreadable file '$file_path'."
@@ -95,6 +96,7 @@ normalize_file() {
 BEGIN {
     brace_depth = 0;
     decl_block = 0;
+    last_blank = 0;
 }
 {
     line = $0;
@@ -135,6 +137,7 @@ BEGIN {
     if (line !~ /^[[:space:]]*#/ \
         && line !~ /^[[:space:]]*\/\// \
         && line !~ /^[[:space:]]*\*/ \
+        && line !~ /=/ \
         && line !~ /\(/ \
         && line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[ ]+[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/) {
         vname = line;
@@ -169,6 +172,16 @@ BEGIN {
     is_comment = (out ~ /^[[:space:]]*\/\// || out ~ /^[[:space:]]*\/\*/ || out ~ /^[[:space:]]*\*/);
     is_decl = 0;
 
+    if (is_blank) {
+        if (last_blank)
+            next;
+        print "";
+        last_blank = 1;
+        if (brace_depth <= 0)
+            decl_block = 0;
+        next;
+    }
+
     if (brace_depth > 0 \
         && out !~ /\(/ \
         && out !~ /^[[:space:]]*#/ \
@@ -178,11 +191,14 @@ BEGIN {
     }
 
     if (brace_depth > 0 && decl_block == 1 && !is_blank && !is_decl && !is_comment) {
-        print "";
+        if (!last_blank)
+            print "";
         decl_block = 0;
+        last_blank = 1;
     }
 
     print out;
+    last_blank = 0;
 
     if (brace_depth > 0) {
         if (is_decl)
@@ -206,16 +222,75 @@ BEGIN {
         return 2
     fi
 
-    if cmp -s "$file_path" "$tmp_out"; then
+    tmp_split="$(mktemp)" || {
+        warn "failed to create secondary temporary file for '$file_path'."
+        return 2
+    }
+    tmp_files+=("$tmp_split")
+
+    if ! awk '
+BEGIN {
+    brace_depth = 0;
+}
+function emit_split_init(line,    sides, lhs, rhs, decl_part, assign_part, name_part, base_part) {
+    if (split(line, sides, "=") < 2) {
+        print line;
+        return;
+    }
+
+    lhs = sides[1];
+    rhs = sides[2];
+    sub(/[[:space:]]+$/, "", lhs);
+    sub(/^[[:space:]]+/, "", rhs);
+    sub(/[[:space:]]*;[[:space:]]*$/, "", rhs);
+
+    indent_part = lhs;
+    sub(/[^[:space:]].*$/, "", indent_part);
+
+    name_part = lhs;
+    sub(/^.*[[:space:]]/, "", name_part);
+
+    base_part = lhs;
+    sub(/[[:space:]]+[A-Za-z_][A-Za-z0-9_]*$/, "", base_part);
+
+    decl_part = base_part "\t" name_part ";";
+    assign_part = indent_part name_part " = " rhs ";";
+
+    print decl_part;
+    print "";
+    print assign_part;
+}
+{
+    line = $0;
+    if (brace_depth > 0 && line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]*]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*[^;]+;[[:space:]]*$/ && line !~ /^[[:space:]]*(if|while|for|switch|return)\b/ && line !~ /\(/) {
+        emit_split_init(line);
+    } else {
+        print line;
+    }
+
+    tmp = line;
+    opens = gsub(/\{/, "{", tmp);
+    tmp = line;
+    closes = gsub(/\}/, "}", tmp);
+    brace_depth += opens - closes;
+    if (brace_depth < 0)
+        brace_depth = 0;
+}
+' "$tmp_out" > "$tmp_split"; then
+        warn "failed to split initialized declarations in '$file_path'."
+        return 2
+    fi
+
+    if cmp -s "$file_path" "$tmp_split"; then
         return 1
     fi
 
-    if ! chmod --reference="$file_path" "$tmp_out"; then
+    if ! chmod --reference="$file_path" "$tmp_split"; then
         warn "failed to preserve permissions for '$file_path'."
         return 2
     fi
 
-    if ! mv "$tmp_out" "$file_path"; then
+    if ! mv "$tmp_split" "$file_path"; then
         warn "failed to replace '$file_path'."
         return 2
     fi

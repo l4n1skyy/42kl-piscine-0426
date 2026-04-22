@@ -312,9 +312,8 @@ END {
 
 	chmod --reference="$target_file" "$tmp_target" || die "failed to preserve permissions for '$target_file'."
 	mv "$tmp_target" "$target_file" || die "failed to update '$target_file'."
-	rm -f "$main_file" || die "failed to delete '$main_file'."
 
-	echo "Appended block-commented main to '$target_file' and deleted '$main_file'."
+	echo "Appended block-commented main to '$target_file'."
 }
 
 process_target_file() {
