@@ -4,11 +4,11 @@ char *ft_strstr(char *str, char *to_find);
 
 int main(void)
 {
-    char *res;
+	char *haystack = "TutorialsPoint";
+	char *needle = "Point";
+	char *empty = "";
 
-    res = ft_strstr("Hello 42", "42");
-    printf("find in 'Hello 42': %s\n", res ? res : "(null)");
-    res = ft_strstr("Hello", "42");
-    printf("find in 'Hello': %s\n", res ? res : "(null)");
-    return (0);
+	printf("Result 1 (Found): %s\n", ft_strstr(haystack, needle));
+	printf("Result 2 (Not Found): %s\n", ft_strstr(haystack, "Google"));
+	printf("Result 3 (Empty Needle): %s\n", ft_strstr(haystack, empty));
 }

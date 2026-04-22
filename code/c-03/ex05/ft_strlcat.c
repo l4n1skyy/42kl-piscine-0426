@@ -1,6 +1,6 @@
 unsigned int	ft_strlcat(char *dest, char *src, unsigned int size);
-unsigned int	strnlen(char *str, unsigned int size);
-unsigned int	strlen(char *str);
+unsigned int	str_n_len(char *str, unsigned int size);
+unsigned int	str_len(char *str);
 
 unsigned int	ft_strlcat(char *dest, char *src, unsigned int size)
 {
@@ -10,8 +10,8 @@ unsigned int	ft_strlcat(char *dest, char *src, unsigned int size)
 	unsigned int	j;
 
 
-	dest_len = strnlen(dest, size);
-	src_len = strlen(src);
+	dest_len = str_n_len(dest, size);
+	src_len = str_len(src);
 	i = dest_len;
 	j = 0;
 
@@ -28,7 +28,7 @@ unsigned int	ft_strlcat(char *dest, char *src, unsigned int size)
 	return (src_len + dest_len);
 }
 
-unsigned int	strnlen(char *str, unsigned int size)
+unsigned int	str_n_len(char *str, unsigned int size)
 {
 	unsigned int	counter;
 	
@@ -41,7 +41,7 @@ unsigned int	strnlen(char *str, unsigned int size)
 	return (counter);
 }
 
-unsigned int	strlen(char *str)
+unsigned int	str_len(char *str)
 {
 	unsigned int	counter;
 	
