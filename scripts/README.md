@@ -5,13 +5,13 @@ This folder contains helper scripts for preparing 42 Piscine files.
 ## How To Use
 
 Use `prep-code` to run all the scripts at once in correct order. 
-First save your paths, then run the script normally.
+First configure your paths (one time thing)
 ```bash
 ./scripts/prep-code scripts=./scripts code=./code
 ./scripts/prep-code scripts=./scripts code=./
 ```
 
-After that, run the pipeline without repeating the path setup:
+After that, run it without repeating the path setup:
 ```bash
 ./scripts/prep-code
 ./scripts/prep-code c-01
