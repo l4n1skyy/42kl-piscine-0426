@@ -12,15 +12,18 @@ warn() {
 }
 
 usage() {
-    echo "Usage: $0 <folder>" >&2
+    echo "Usage: $0 [scripts=<path> code=<path>] <folder>" >&2
     echo "Examples:" >&2
+    echo "  $0 scripts=./scripts code=./code" >&2
     echo "  $0 c-01" >&2
-    echo "  CODE_ROOT=./code $0 c-01" >&2
 }
 
 require_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "required command '$1' not found."
 }
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+config_file="$script_dir/.prep-code.conf"
 
 tmp_files=()
 
@@ -45,6 +48,89 @@ abs_dir() {
 
     [[ -d "$p" ]] || return 1
     (cd "$p" && pwd)
+}
+
+resolve_dir_arg() {
+    local raw="$1"
+
+    if [[ "$raw" == /* ]]; then
+        abs_dir "$raw" || return 1
+        return
+    fi
+
+    if [[ -d "$raw" ]]; then
+        abs_dir "$raw" || return 1
+        return
+    fi
+
+    abs_dir "$PWD/$raw" || return 1
+}
+
+is_config_mode() {
+    local arg
+
+    [[ $# -gt 0 ]] || return 1
+    for arg in "$@"; do
+        [[ "$arg" == *=* ]] || return 1
+    done
+    return 0
+}
+
+load_config() {
+    code_root_raw="${CODE_ROOT:-$PWD}"
+    code_root="$code_root_raw"
+
+    if [[ -f "$config_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$config_file"
+    fi
+
+    code_root="${CODE_DIR:-$code_root}"
+    code_root="$(abs_dir "$code_root")" || die "CODE_ROOT '$code_root' is not a readable directory."
+}
+
+write_config() {
+    local scripts_path="$1"
+    local code_path="$2"
+
+    {
+        printf 'SCRIPTS_DIR=%q\n' "$scripts_path"
+        printf 'CODE_DIR=%q\n' "$code_path"
+    } > "$config_file"
+}
+
+configure_only() {
+    local scripts_path="$script_dir"
+    local code_path=""
+    local key
+    local value
+    local arg
+
+    for arg in "$@"; do
+        key="${arg%%=*}"
+        value="${arg#*=}"
+        case "$key" in
+            scripts)
+                scripts_path="$(resolve_dir_arg "$value")" || die "invalid scripts directory '$value'."
+                ;;
+            code)
+                code_path="$(resolve_dir_arg "$value")" || die "invalid code directory '$value'."
+                ;;
+            *)
+                die "unknown configuration key '$key'. Supported keys: scripts, code."
+                ;;
+        esac
+    done
+
+    [[ -d "$scripts_path" ]] || die "scripts directory '$scripts_path' does not exist."
+    [[ -d "$code_path" ]] || die "code directory '$code_path' does not exist."
+
+    write_config "$scripts_path" "$code_path"
+
+    echo "Configuration saved in '$config_file'."
+    echo "scripts=$scripts_path"
+    echo "code=$code_path"
+    echo "No scripts were executed."
 }
 
 resolve_target_dir() {
@@ -298,6 +384,11 @@ function emit_split_init(line,    sides, lhs, rhs, decl_part, assign_part, name_
     return 0
 }
 
+if is_config_mode "$@"; then
+    configure_only "$@"
+    exit 0
+fi
+
 if [[ $# -ne 1 ]]; then
     usage
     exit 1
@@ -309,8 +400,7 @@ input="$1"
     exit 1
 }
 
-code_root_raw="${CODE_ROOT:-$PWD}"
-code_root="$(abs_dir "$code_root_raw")" || die "CODE_ROOT '$code_root_raw' is not a readable directory."
+load_config
 
 target_dir="$(resolve_target_dir "$input")"
 [[ -r "$target_dir" ]] || die "folder '$target_dir' is not readable."
