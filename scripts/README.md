@@ -4,7 +4,7 @@ This folder contains helper scripts for preparing 42 Piscine files.
 
 ## How To Use
 
-Use `prep-code` for the full pipeline. First save your paths, then run the script normally.
+Use `prep-code` to run all the other scripts. First save your paths, then run the script normally.
 ```bash
 ./scripts/prep-code scripts=./scripts code=./code
 ./scripts/prep-code scripts=./scripts code=./
