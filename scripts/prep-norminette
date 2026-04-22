@@ -158,6 +158,7 @@ normalize_file() {
     local file_path="$1"
     local tmp_out
     local tmp_split
+    local tmp_final
 
     if [[ ! -r "$file_path" ]]; then
         warn "skipping unreadable file '$file_path'."
@@ -191,8 +192,8 @@ BEGIN {
 
     # Normalize line-end spacing around common delimiters.
     sub(/[ \t]*;[ \t]*$/, ";", line);
-    sub(/[ \t]*\{[ \t]*$/, "{", line);
-    sub(/[ \t]*\}[ \t]*$/, "}", line);
+    sub(/\{[ \t]*$/, "{", line);
+    sub(/\}[ \t]*$/, "}", line);
 
     indent = "";
     while (substr(line, 1, 4) == "    ") {
@@ -367,16 +368,116 @@ function emit_split_init(line,    sides, lhs, rhs, decl_part, assign_part, name_
         return 2
     fi
 
-    if cmp -s "$file_path" "$tmp_split"; then
+    tmp_final="$(mktemp)" || {
+        warn "failed to create final temporary file for '$file_path'."
+        return 2
+    }
+    tmp_files+=("$tmp_final")
+
+    if ! awk '
+BEGIN {
+    brace_depth = 0;
+    top_last_blank = 0;
+}
+function is_decl_line(s,    t) {
+    t = s;
+    if (t ~ /^[[:space:]]*#/)
+        return 0;
+    if (t ~ /^[[:space:]]*\/\//)
+        return 0;
+    if (t ~ /^[[:space:]]*\/\*/)
+        return 0;
+    if (t ~ /^[[:space:]]*\*/)
+        return 0;
+    if (t ~ /[(]/)
+        return 0;
+    if (t ~ /^[[:space:]]*(if|while|for|switch|return)\b/)
+        return 0;
+    return (t ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?[[:space:]]*;[[:space:]]*$/);
+}
+{
+    line = $0;
+    sub(/[ \t]+$/, "", line);
+
+    cur = brace_depth;
+    blank = (line ~ /^[[:space:]]*$/);
+
+    if (cur == 0) {
+        if (blank) {
+            if (!top_last_blank)
+                print "";
+            top_last_blank = 1;
+            next;
+        }
+        print line;
+        top_last_blank = 0;
+    } else {
+        if (!(cur in block_init)) {
+            block_init[cur] = 1;
+            decl_mode[cur] = 1;
+            saw_decl[cur] = 0;
+            pending_blank[cur] = 0;
+        }
+
+        if (blank) {
+            pending_blank[cur] = 1;
+            next;
+        }
+
+        decl = is_decl_line(line);
+
+        if (decl_mode[cur] == 1) {
+            if (decl) {
+                print line;
+                saw_decl[cur] = 1;
+                pending_blank[cur] = 0;
+            } else {
+                if (saw_decl[cur] == 1 && line !~ /^[[:space:]]*\}/)
+                    print "";
+                print line;
+                decl_mode[cur] = 0;
+                pending_blank[cur] = 0;
+            }
+        } else {
+            print line;
+            pending_blank[cur] = 0;
+        }
+    }
+
+    tmp = line;
+    opens = gsub(/\{/, "{", tmp);
+    tmp = line;
+    closes = gsub(/\}/, "}", tmp);
+
+    if (opens > 0) {
+        for (k = 1; k <= opens; k++) {
+            d = brace_depth + k;
+            block_init[d] = 1;
+            decl_mode[d] = 1;
+            saw_decl[d] = 0;
+            pending_blank[d] = 0;
+        }
+    }
+
+    brace_depth += opens - closes;
+    if (brace_depth < 0)
+        brace_depth = 0;
+}
+' "$tmp_split" > "$tmp_final"; then
+        warn "failed to apply function-body spacing rules in '$file_path'."
+        return 2
+    fi
+
+    if cmp -s "$file_path" "$tmp_final"; then
         return 1
     fi
 
-    if ! chmod --reference="$file_path" "$tmp_split"; then
+    if ! chmod --reference="$file_path" "$tmp_final"; then
         warn "failed to preserve permissions for '$file_path'."
         return 2
     fi
 
-    if ! mv "$tmp_split" "$file_path"; then
+    if ! mv "$tmp_final" "$file_path"; then
         warn "failed to replace '$file_path'."
         return 2
     fi
