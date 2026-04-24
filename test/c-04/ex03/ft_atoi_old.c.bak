@@ -1,0 +1,64 @@
+#include <stdio.h>
+
+int	ft_atoi(char *str);
+int	is_digit(char c);
+int	is_sign(char c);
+
+int	ft_atoi(char *str)
+{
+	int	found_int = 0;
+	char	*str_int;
+	int	sign = 1;
+
+	// clean up string
+	while (*str)
+	{
+		char *	str_next = str + 1;
+		
+		// if current is digit, and next is not (end of int)
+		if (is_digit(*str) && !is_digit(*str_next))
+			*str_next = '\0';
+		
+		// collapse the signs
+		if (*str == '-')
+			sign *= -1;
+
+		// if signs do not proceed with digit, ignore it
+		if (is_sign(*str) && !is_digit(*str_next) && !is_sign(*str_next))
+			sign = 1;
+
+		// keep track of address of first digit of int
+		if (is_digit(*str) && !found_int)
+		{
+			str_int = str;
+			found_int = 1;
+		}
+		str++;
+	}
+
+	// print the stuff first
+	if (sign < 0)
+		printf("-");
+	printf("%s", str_int);
+
+	// convert to int
+	
+
+	return 0;
+}
+
+int	is_digit(char c)
+{
+	if (c >= '0' && c <= '9')
+		return (1);
+	else
+		return (0);
+}
+
+int	is_sign(char c)
+{
+	if (c == '-' || c == '+')
+		return (1);
+	else
+		return (0);
+}
