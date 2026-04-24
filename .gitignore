@@ -21,3 +21,5 @@ Thumbs.db
 **/*.pub
 scripts/
 lazy42/
+test/
+tmp/
