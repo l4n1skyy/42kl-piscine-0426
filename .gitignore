@@ -19,3 +19,4 @@ Thumbs.db
 # Security / SSH Keys
 **/id_rsa_pub
 **/*.pub
+scripts/
