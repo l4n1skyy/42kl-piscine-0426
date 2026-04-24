@@ -20,3 +20,4 @@ Thumbs.db
 **/id_rsa_pub
 **/*.pub
 scripts/
+lazy42/
