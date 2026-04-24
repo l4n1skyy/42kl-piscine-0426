@@ -12,9 +12,9 @@ warn() {
 }
 
 usage() {
-    echo "Usage: $0 [scripts=<path> code=<path>] <folder>" >&2
+    echo "Usage: $0 <folder>" >&2
     echo "Examples:" >&2
-    echo "  $0 scripts=./scripts code=./code username=lanusri- email=lanusri-@student.42kl.edu.my" >&2
+    echo "  Fill scripts/prep.config first (SCRIPTS_DIR and CODE_DIR)." >&2
     echo "  $0 c-01" >&2
 }
 
@@ -52,6 +52,13 @@ abs_dir() {
     (cd "$p" && pwd)
 }
 
+abs_file() {
+    local f="$1"
+
+    [[ -f "$f" ]] || return 1
+    printf '%s\n' "$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
+}
+
 resolve_dir_arg() {
     local raw="$1"
 
@@ -79,16 +86,16 @@ is_config_mode() {
 }
 
 load_config() {
-    code_root_raw="${CODE_ROOT:-$PWD}"
-    code_root="$code_root_raw"
+    [[ -f "$config_file" ]] || die "missing '$config_file'. Fill SCRIPTS_DIR and CODE_DIR first."
 
-    if [[ -f "$config_file" ]]; then
-        # shellcheck disable=SC1090
-        source "$config_file"
-    fi
+    # shellcheck disable=SC1090
+    source "$config_file"
 
-    code_root="${CODE_DIR:-$code_root}"
-    code_root="$(abs_dir "$code_root")" || die "CODE_ROOT '$code_root' is not a readable directory."
+    [[ -n "${SCRIPTS_DIR:-}" ]] || die "SCRIPTS_DIR is not set in '$config_file'."
+    [[ -n "${CODE_DIR:-}" ]] || die "CODE_DIR is not set in '$config_file'."
+
+    abs_dir "$SCRIPTS_DIR" >/dev/null || die "SCRIPTS_DIR '$SCRIPTS_DIR' is not a readable directory."
+    code_root="$(abs_dir "$CODE_DIR")" || die "CODE_DIR '$CODE_DIR' is not a readable directory."
 }
 
 write_config() {
@@ -368,6 +375,8 @@ BEGIN {
     brace_depth = 0;
     decl_block = 0;
     last_blank = 0;
+    proto_target_units = 2;
+    var_target_units = 2;
     sq = sprintf("%c", 39);
 }
 function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, esc) {
@@ -408,6 +417,50 @@ function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, e
     }
     return out;
 }
+function normalize_type(type_part,    t) {
+    t = type_part;
+    sub(/^[[:space:]]+/, "", t);
+    sub(/[[:space:]]+$/, "", t);
+    gsub(/[[:space:]]+/, " ", t);
+    return t;
+}
+function tabs_for_units(base_len, target_units,    tabs) {
+    tabs = 1;
+    while (int((base_len + (tabs * 4)) / 4) < target_units)
+        tabs++;
+    return tabs;
+}
+function repeat_tabs(n,    i, out) {
+    out = "";
+    for (i = 0; i < n; i++)
+        out = out "\t";
+    return out;
+}
+function fix_kw_paren(s, kw) {
+    gsub(kw "\\(", kw " (", s);
+    gsub(kw "[[:space:]][[:space:]]+\\(", kw " (", s);
+    return s;
+}
+function normalize_return_expr(s,    expr) {
+    if (s ~ /^[[:space:]]*return[[:space:]]*;[[:space:]]*$/)
+        return "return;";
+    if (s ~ /^[[:space:]]*return[[:space:]]+[^;]+;[[:space:]]*$/ \
+        && s !~ /^[[:space:]]*return[[:space:]]*\(.*\)[[:space:]]*;[[:space:]]*$/) {
+        expr = s;
+        sub(/^[[:space:]]*return[[:space:]]+/, "", expr);
+        sub(/[[:space:]]*;[[:space:]]*$/, "", expr);
+        return "return (" expr ");";
+    }
+    return s;
+}
+function space_binary_minus(s,    seg) {
+    while (match(s, /[0-9A-Za-z_)\]]-[0-9A-Za-z_(]/)) {
+        seg = substr(s, RSTART, RLENGTH);
+        seg = substr(seg, 1, 1) " - " substr(seg, RLENGTH, 1);
+        s = substr(s, 1, RSTART - 1) seg substr(s, RSTART + RLENGTH);
+    }
+    return s;
+}
 {
     line = $0;
     sub(/\r$/, "", line);
@@ -419,26 +472,64 @@ function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, e
     sub(/\}[ \t]*$/, "}", line);
 
     indent = "";
+    if (match(line, /^[ \t]+/)) {
+        ws = substr(line, 1, RLENGTH);
+        if (ws ~ / /) {
+            cols = 0;
+            for (wsi = 1; wsi <= length(ws); wsi++) {
+                wsc = substr(ws, wsi, 1);
+                if (wsc == "\t")
+                    cols += 4;
+                else
+                    cols += 1;
+            }
+            tabs = int((cols + 3) / 4);
+            if (brace_depth > 0 && cols > 0 && tabs < brace_depth)
+                tabs = brace_depth;
+            indent = repeat_tabs(tabs);
+            line = substr(line, RLENGTH + 1);
+        }
+    }
     while (substr(line, 1, 4) == "    ") {
         indent = indent "\t";
         line = substr(line, 5);
     }
+    while (substr(line, 1, 1) == "\t") {
+        indent = indent "\t";
+        line = substr(line, 2);
+    }
+    if (brace_depth > 0 && line !~ /^[[:space:]]*\}/ && length(indent) < brace_depth)
+        indent = repeat_tabs(brace_depth);
+
+    line = fix_kw_paren(line, "if");
+    line = fix_kw_paren(line, "while");
+    line = fix_kw_paren(line, "for");
+    line = fix_kw_paren(line, "switch");
+    line = normalize_return_expr(line);
+    if (line !~ /"/)
+        line = space_binary_minus(line);
 
     if (line ~ /\(/ \
         && line !~ /^[[:space:]]*#/ \
         && line !~ /^[[:space:]]*\/\// \
         && line !~ /^[[:space:]]*\*/ \
-        && line !~ /^[[:space:]]*(if|while|for|switch|return|sizeof)\b/) {
+        && line !~ /^[[:space:]]*(if|while|for|switch|return|sizeof)([[:space:]]|\()/) {
         open_pos = index(line, "(");
         if (open_pos > 1) {
             pre = substr(line, 1, open_pos - 1);
             post = substr(line, open_pos);
-            if (pre ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[ ]+[A-Za-z_][A-Za-z0-9_]*$/) {
+            if (pre ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[[:space:]]+[*&]*[A-Za-z_][A-Za-z0-9_]*$/) {
                 fname = pre;
-                sub(/^.*[ ]/, "", fname);
+                sub(/^.*[[:space:]]/, "", fname);
                 base = pre;
-                sub(/[ ]+[A-Za-z_][A-Za-z0-9_]*$/, "", base);
-                pre = base "\t" fname;
+                sub(/[[:space:]]+[*&]*[A-Za-z_][A-Za-z0-9_]*$/, "", base);
+                base = normalize_type(base);
+                if (brace_depth == 0 && line ~ /\)[[:space:]]*;[[:space:]]*$/) {
+                    tabs = tabs_for_units(length(base), proto_target_units);
+                    pre = base repeat_tabs(tabs) fname;
+                } else {
+                    pre = base "\t" fname;
+                }
                 line = pre post;
             }
         }
@@ -449,15 +540,17 @@ function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, e
         && line !~ /^[[:space:]]*\*/ \
         && line !~ /=/ \
         && line !~ /\(/ \
-        && line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[ ]+[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/) {
+        && line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[[:space:]]+[*&]*[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/) {
         vname = line;
-        sub(/^.*[ ]/, "", vname);
+        sub(/^.*[[:space:]]/, "", vname);
         sub(/(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/, "", vname);
         base = line;
-        sub(/[ ]+[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/, "", base);
+        sub(/[[:space:]]+[*&]*[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/, "", base);
         rest = line;
-        sub(/^.*[ ]+[A-Za-z_][A-Za-z0-9_]*/, "", rest);
-        line = base "\t" vname rest;
+        sub(/^.*[[:space:]]+[*&]*[A-Za-z_][A-Za-z0-9_]*/, "", rest);
+        base = normalize_type(base);
+        tabs = tabs_for_units(length(base), var_target_units);
+        line = base repeat_tabs(tabs) vname rest;
     }
 
     if (line !~ /^[[:space:]]*#/ \
@@ -474,7 +567,16 @@ function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, e
         }
     }
 
-    line = collapse_spaces_code(line);
+    if (line !~ /^[[:space:]]*\/\*/ && line !~ /^[[:space:]]*\*/) {
+        line = collapse_spaces_code(line);
+    }
+
+    emit_brace = 0;
+    if (line ~ /^[[:space:]]*(if|while|for|else|switch)([[:space:]]|\().*\{[[:space:]]*$/ \
+        || (line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*\(.*\)[[:space:]]*\{[[:space:]]*$/ && line !~ /;[[:space:]]*$/)) {
+        sub(/[[:space:]]*\{[[:space:]]*$/, "", line);
+        emit_brace = 1;
+    }
 
     sub(/[ \t]+$/, "", line);
 
@@ -497,19 +599,14 @@ function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, e
     if (brace_depth > 0 \
         && out !~ /\(/ \
         && out !~ /^[[:space:]]*#/ \
-        && out !~ /^[[:space:]]*(return|if|while|for|switch)\b/ \
-        && out ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/) {
+        && out !~ /^[[:space:]]*(return|if|while|for|switch)([[:space:]]|\()/ \
+        && out ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][*&]*[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([[:space:]]*=[^;]+)?[[:space:]]*;[[:space:]]*$/) {
         is_decl = 1;
     }
 
-    if (brace_depth > 0 && decl_block == 1 && !is_blank && !is_decl && !is_comment) {
-        if (!last_blank)
-            print "";
-        decl_block = 0;
-        last_blank = 1;
-    }
-
     print out;
+    if (emit_brace)
+        print indent "{";
     last_blank = 0;
 
     if (brace_depth > 0) {
@@ -521,11 +618,17 @@ function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, e
         decl_block = 0;
     }
 
-    tmp = out;
-    opens = gsub(/\{/, "{", tmp);
-    tmp = out;
-    closes = gsub(/\}/, "}", tmp);
+    opens = 0;
+    closes = 0;
+    if (out !~ /^[[:space:]]*#/ && out !~ /^[[:space:]]*\/\// && out !~ /^[[:space:]]*\/\*/ && out !~ /^[[:space:]]*\*/) {
+        tmp = out;
+        opens = gsub(/\{/, "{", tmp);
+        tmp = out;
+        closes = gsub(/\}/, "}", tmp);
+    }
     brace_depth += opens - closes;
+    if (emit_brace)
+        brace_depth += 1;
     if (brace_depth < 0)
         brace_depth = 0;
 }
@@ -543,53 +646,403 @@ function collapse_spaces_code(s,    i, c, prev, out, in_sq, in_dq, in_comment, e
     if ! awk '
 BEGIN {
     brace_depth = 0;
+    decl_zone[0] = 0;
+    var_target_units = 2;
 }
-function emit_split_init(line,    sides, lhs, rhs, decl_part, assign_part, name_part, base_part) {
-    if (split(line, sides, "=") < 2) {
-        print line;
-        return;
-    }
-
-    lhs = sides[1];
-    rhs = sides[2];
-    sub(/[[:space:]]+$/, "", lhs);
-    sub(/^[[:space:]]+/, "", rhs);
-    sub(/[[:space:]]*;[[:space:]]*$/, "", rhs);
-
-    indent_part = lhs;
-    sub(/[^[:space:]].*$/, "", indent_part);
-
-    name_part = lhs;
-    sub(/^.*[[:space:]]/, "", name_part);
-
-    base_part = lhs;
-    sub(/[[:space:]]+[A-Za-z_][A-Za-z0-9_]*$/, "", base_part);
-
-    decl_part = base_part "\t" name_part ";";
-    assign_part = indent_part name_part " = " rhs ";";
-
-    print decl_part;
-    print "";
-    print assign_part;
+function is_comment_line(s,    t) {
+    t = s;
+    return (t ~ /^[[:space:]]*\/\// || t ~ /^[[:space:]]*\/\*/ || t ~ /^[[:space:]]*\*/);
+}
+function is_decl_line_simple(s,    t) {
+    t = s;
+    if (t ~ /^[[:space:]]*#/) return 0;
+    if (is_comment_line(t)) return 0;
+    if (t ~ /[(]/) return 0;
+    if (t ~ /^[[:space:]]*(if|while|for|switch|return)([[:space:]]|\()/) return 0;
+    return (t ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][*&]*[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?[[:space:]]*;[[:space:]]*$/);
+}
+function normalize_type(type_part,    t) {
+    t = type_part;
+    sub(/^[[:space:]]+/, "", t);
+    sub(/[[:space:]]+$/, "", t);
+    gsub(/[[:space:]]+/, " ", t);
+    return t;
+}
+function tabs_for_units(base_len, target_units,    tabs) {
+    tabs = 1;
+    while (int((base_len + (tabs * 4)) / 4) < target_units)
+        tabs++;
+    return tabs;
+}
+function repeat_tabs(n,    i, out) {
+    out = "";
+    for (i = 0; i < n; i++)
+        out = out "\t";
+    return out;
 }
 {
     line = $0;
-    if (brace_depth > 0 && line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]*]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*[^;]+;[[:space:]]*$/ && line !~ /^[[:space:]]*(if|while|for|switch|return)\b/ && line !~ /\(/) {
-        emit_split_init(line);
+    cur = brace_depth;
+    blank = (line ~ /^[[:space:]]*$/);
+    is_decl = is_decl_line_simple(line);
+    is_init_decl = (line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]*]*[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*[^;]+;[[:space:]]*$/ && line !~ /^[[:space:]]*(if|while|for|switch|return)([[:space:]]|\()/);
+
+    if (!(cur in decl_zone)) {
+        decl_zone[cur] = (cur > 0 ? 1 : 0);
+        pending_assign[cur] = "";
+    }
+
+    if (cur > 0 && decl_zone[cur] == 1 && blank) {
+        next;
+    }
+
+    if (cur > 0 && decl_zone[cur] == 1 && is_init_decl) {
+        lhs = line;
+        sub(/=.*/, "", lhs);
+        sub(/[[:space:]]+$/, "", lhs);
+        rhs = line;
+        sub(/^[^=]*=[[:space:]]*/, "", rhs);
+        sub(/[[:space:]]*;[[:space:]]*$/, "", rhs);
+        indent_part = lhs;
+        sub(/[^[:space:]].*$/, "", indent_part);
+        name_part = lhs;
+        sub(/^.*[[:space:]]/, "", name_part);
+        base_part = lhs;
+        sub(/[[:space:]]+[A-Za-z_][A-Za-z0-9_]*$/, "", base_part);
+        base_part = normalize_type(base_part);
+        tabs = tabs_for_units(length(base_part), var_target_units);
+        decl_part = indent_part base_part repeat_tabs(tabs) name_part ";";
+        assign_part = indent_part name_part " = " rhs ";";
+        print decl_part;
+        if (pending_assign[cur] != "")
+            pending_assign[cur] = pending_assign[cur] "\n" assign_part;
+        else
+            pending_assign[cur] = assign_part;
+    } else if (cur > 0 && decl_zone[cur] == 1 && is_decl) {
+        print line;
+    } else if (cur > 0 && is_init_decl) {
+        lhs = line;
+        sub(/=.*/, "", lhs);
+        sub(/[[:space:]]+$/, "", lhs);
+        rhs = line;
+        sub(/^[^=]*=[[:space:]]*/, "", rhs);
+        sub(/[[:space:]]*;[[:space:]]*$/, "", rhs);
+        indent_part = lhs;
+        sub(/[^[:space:]].*$/, "", indent_part);
+        name_part = lhs;
+        sub(/^.*[[:space:]]/, "", name_part);
+        base_part = lhs;
+        sub(/[[:space:]]+[A-Za-z_][A-Za-z0-9_]*$/, "", base_part);
+        base_part = normalize_type(base_part);
+        tabs = tabs_for_units(length(base_part), var_target_units);
+        decl_part = indent_part base_part repeat_tabs(tabs) name_part ";";
+        assign_part = indent_part name_part " = " rhs ";";
+        print decl_part;
+        print "";
+        print assign_part;
     } else {
+        if (cur > 0 && decl_zone[cur] == 1) {
+            if (pending_assign[cur] != "") {
+                print "";
+                n = split(pending_assign[cur], pa_lines, "\n");
+                for (pi = 1; pi <= n; pi++)
+                    print pa_lines[pi];
+                pending_assign[cur] = "";
+            }
+            decl_zone[cur] = 0;
+        }
         print line;
     }
 
-    tmp = line;
-    opens = gsub(/\{/, "{", tmp);
-    tmp = line;
-    closes = gsub(/\}/, "}", tmp);
+    opens = 0;
+    closes = 0;
+    if (line !~ /^[[:space:]]*#/ && !is_comment_line(line)) {
+        tmp = line;
+        opens = gsub(/\{/, "{", tmp);
+        tmp = line;
+        closes = gsub(/\}/, "}", tmp);
+    }
+    brace_depth += opens - closes;
+    if (brace_depth < 0)
+        brace_depth = 0;
+
+    if (opens > 0) {
+        for (k = 1; k <= opens; k++) {
+            d = cur + k;
+            decl_zone[d] = 1;
+            pending_assign[d] = "";
+        }
+    }
+}
+' "$tmp_out" > "$tmp_split"; then
+        warn "failed to split initialized declarations in '$file_path'."
+        return 2
+    fi
+
+    tmp_reorder="$(mktemp)" || {
+        warn "failed to create declaration-reorder temporary file for '$file_path'."
+        return 2
+    }
+    tmp_files+=("$tmp_reorder")
+
+    if ! awk '
+BEGIN {
+    brace_depth = 0;
+    have_prev = 0;
+}
+function is_comment_line(s,    t) {
+    t = s;
+    return (t ~ /^[[:space:]]*\/\// || t ~ /^[[:space:]]*\/\*/ || t ~ /^[[:space:]]*\*/);
+}
+function is_decl_line(s,    t) {
+    t = s;
+    if (t ~ /^[[:space:]]*#/)
+        return 0;
+    if (is_comment_line(t))
+        return 0;
+    if (t ~ /[(]/)
+        return 0;
+    if (t ~ /^[[:space:]]*(if|while|for|switch|return)([[:space:]]|\()/)
+        return 0;
+    return (t ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][*&]*[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?[[:space:]]*;[[:space:]]*$/);
+}
+function is_assign_line(s,    t) {
+    t = s;
+    if (t ~ /^[[:space:]]*#/)
+        return 0;
+    if (is_comment_line(t))
+        return 0;
+    if (t ~ /==|!=|<=|>=/)
+        return 0;
+    return (t ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_\[\]\->\.]*[[:space:]]*=[^=].*;[[:space:]]*$/);
+}
+function update_depth(s,    opens, closes, tmp) {
+    opens = 0;
+    closes = 0;
+    if (s !~ /^[[:space:]]*#/ && !is_comment_line(s)) {
+        tmp = s;
+        opens = gsub(/\{/, "{", tmp);
+        tmp = s;
+        closes = gsub(/\}/, "}", tmp);
+    }
     brace_depth += opens - closes;
     if (brace_depth < 0)
         brace_depth = 0;
 }
-' "$tmp_out" > "$tmp_split"; then
-        warn "failed to split initialized declarations in '$file_path'."
+function emit_line(s) {
+    print s;
+    update_depth(s);
+}
+{
+    line = $0;
+    cur_depth = brace_depth;
+    cur_decl = is_decl_line(line);
+    cur_assign = is_assign_line(line);
+
+    if (have_prev) {
+        if (prev_depth > 0 && prev_assign && cur_decl && prev_depth == cur_depth) {
+            emit_line(line);
+            emit_line(prev_line);
+            have_prev = 0;
+            next;
+        }
+        emit_line(prev_line);
+    }
+
+    prev_line = line;
+    prev_depth = cur_depth;
+    prev_decl = cur_decl;
+    prev_assign = cur_assign;
+    have_prev = 1;
+}
+END {
+    if (have_prev)
+        emit_line(prev_line);
+}
+' "$tmp_split" > "$tmp_reorder"; then
+        warn "failed to reorder declaration/assignment lines in '$file_path'."
+        return 2
+    fi
+
+    tmp_hoist="$(mktemp)" || {
+        warn "failed to create comment-hoist temporary file for '$file_path'."
+        return 2
+    }
+    tmp_files+=("$tmp_hoist")
+
+    if ! awk '
+BEGIN {
+    in_func = 0;
+    func_depth = 0;
+    saw_open = 0;
+    func_n = 0;
+    comment_n = 0;
+}
+function is_comment_line(s,    t) {
+    t = s;
+    return (t ~ /^[[:space:]]*\/\// || t ~ /^[[:space:]]*\/\*/ || t ~ /^[[:space:]]*\*/);
+}
+function is_func_sig(s,    t) {
+    t = s;
+    if (t ~ /^[[:space:]]*#/) return 0;
+    if (is_comment_line(t)) return 0;
+    if (t ~ /^[[:space:]]*(if|while|for|switch|return)([[:space:]]|\()/) return 0;
+    if (t ~ /;[[:space:]]*$/) return 0;
+    return (t ~ /[(]/);
+}
+function is_decl_line(s,    t) {
+    t = s;
+    if (t ~ /^[[:space:]]*#/) return 0;
+    if (is_comment_line(t)) return 0;
+    if (t ~ /[(]/) return 0;
+    if (t ~ /=/) return 0;
+    if (t ~ /^[[:space:]]*(if|while|for|switch|return)([[:space:]]|\()/) return 0;
+    return (t ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][*&]*[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?[[:space:]]*;[[:space:]]*$/);
+}
+function count_braces(s,    t, opens, closes) {
+    t = s;
+    sub(/\/\/.*/, "", t);
+    opens = gsub(/\{/, "{", t);
+    t = s;
+    sub(/\/\/.*/, "", t);
+    closes = gsub(/\}/, "}", t);
+    return opens - closes;
+}
+function norm_decl_indent(s,    t) {
+    t = s;
+    sub(/^[[:space:]]+/, "", t);
+    return "\t" t;
+}
+function flush_func(    i, j, open_idx, depth, insert_at, decl_mode, line, inserted, k) {
+    if (func_n == 0) {
+        in_func = 0;
+        func_depth = 0;
+        saw_open = 0;
+        return;
+    }
+
+    open_idx = 0;
+    for (i = 1; i <= func_n; i++) {
+        if (index(func_lines[i], "{") > 0) {
+            open_idx = i;
+            break;
+        }
+    }
+
+    if (open_idx == 0) {
+        for (i = 1; i <= comment_n; i++)
+            print hoisted_comments[i];
+        for (i = 1; i <= func_n; i++)
+            print func_lines[i];
+        delete hoisted_comments;
+        delete func_lines;
+        delete skip_line;
+        delete hoisted_vars;
+        comment_n = 0;
+        func_n = 0;
+        var_n = 0;
+        in_func = 0;
+        func_depth = 0;
+        saw_open = 0;
+        return;
+    }
+
+    depth = 0;
+    for (i = 1; i <= open_idx; i++)
+        depth += count_braces(func_lines[i]);
+
+    var_n = 0;
+    insert_at = 0;
+    decl_mode = 1;
+    for (i = open_idx + 1; i <= func_n; i++) {
+        line = func_lines[i];
+
+        if (depth >= 2 && is_decl_line(line)) {
+            hoisted_vars[++var_n] = norm_decl_indent(line);
+            skip_line[i] = 1;
+        }
+
+        if (depth == 1 && !skip_line[i] && insert_at == 0) {
+            if (line ~ /^[[:space:]]*$/) {
+                # keep scanning declaration zone
+            } else if (is_decl_line(line)) {
+                # still declaration zone
+            } else if (line !~ /^[[:space:]]*\}/) {
+                insert_at = i;
+            }
+        }
+
+        depth += count_braces(line);
+    }
+
+    if (insert_at == 0)
+        insert_at = open_idx + 1;
+
+    for (i = 1; i <= comment_n; i++)
+        print hoisted_comments[i];
+
+    inserted = 0;
+    for (i = 1; i <= func_n; i++) {
+        if (!inserted && i == insert_at && var_n > 0) {
+            print "";
+            for (k = 1; k <= var_n; k++)
+                print hoisted_vars[k];
+            print "";
+            inserted = 1;
+        }
+        if (!skip_line[i])
+            print func_lines[i];
+    }
+
+    delete hoisted_comments;
+    delete func_lines;
+    delete skip_line;
+    delete hoisted_vars;
+    comment_n = 0;
+    func_n = 0;
+    var_n = 0;
+    in_func = 0;
+    func_depth = 0;
+    saw_open = 0;
+}
+{
+    line = $0;
+    if (!in_func) {
+        if (is_func_sig(line)) {
+            in_func = 1;
+            func_n = 1;
+            func_lines[func_n] = line;
+            delta = count_braces(line);
+            if (delta > 0)
+                saw_open = 1;
+            func_depth += delta;
+            if (saw_open && func_depth == 0)
+                flush_func();
+        } else {
+            print line;
+        }
+        next;
+    }
+
+    if (line ~ /^[[:space:]]*\/\//) {
+        hoisted_comments[++comment_n] = line;
+        next;
+    }
+
+    func_lines[++func_n] = line;
+    delta = count_braces(line);
+    if (delta > 0)
+        saw_open = 1;
+    func_depth += delta;
+    if (saw_open && func_depth == 0)
+        flush_func();
+}
+END {
+    if (in_func)
+        flush_func();
+}
+' "$tmp_reorder" > "$tmp_hoist"; then
+        warn "failed to hoist inline comments in '$file_path'."
         return 2
     fi
 
@@ -604,21 +1057,21 @@ BEGIN {
     brace_depth = 0;
     top_last_blank = 0;
 }
+function is_comment_line(s,    t) {
+    t = s;
+    return (t ~ /^[[:space:]]*\/\// || t ~ /^[[:space:]]*\/\*/ || t ~ /^[[:space:]]*\*/);
+}
 function is_decl_line(s,    t) {
     t = s;
     if (t ~ /^[[:space:]]*#/)
         return 0;
-    if (t ~ /^[[:space:]]*\/\//)
-        return 0;
-    if (t ~ /^[[:space:]]*\/\*/)
-        return 0;
-    if (t ~ /^[[:space:]]*\*/)
+    if (is_comment_line(t))
         return 0;
     if (t ~ /[(]/)
         return 0;
-    if (t ~ /^[[:space:]]*(if|while|for|switch|return)\b/)
+    if (t ~ /^[[:space:]]*(if|while|for|switch|return)([[:space:]]|\()/)
         return 0;
-    return (t ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?[[:space:]]*;[[:space:]]*$/);
+    return (t ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_[:space:]\*]*[\t ][*&]*[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?[[:space:]]*;[[:space:]]*$/);
 }
 {
     line = $0;
@@ -641,38 +1094,41 @@ function is_decl_line(s,    t) {
             block_init[cur] = 1;
             decl_mode[cur] = 1;
             saw_decl[cur] = 0;
-            pending_blank[cur] = 0;
+            saw_blank[cur] = 0;
         }
 
         if (blank) {
-            pending_blank[cur] = 1;
+            saw_blank[cur] = 1;
             next;
         }
 
         decl = is_decl_line(line);
-
         if (decl_mode[cur] == 1) {
             if (decl) {
                 print line;
                 saw_decl[cur] = 1;
-                pending_blank[cur] = 0;
+                saw_blank[cur] = 0;
             } else {
                 if (saw_decl[cur] == 1 && line !~ /^[[:space:]]*\}/)
                     print "";
                 print line;
                 decl_mode[cur] = 0;
-                pending_blank[cur] = 0;
+                saw_blank[cur] = 0;
             }
         } else {
             print line;
-            pending_blank[cur] = 0;
+            saw_blank[cur] = 0;
         }
     }
 
-    tmp = line;
-    opens = gsub(/\{/, "{", tmp);
-    tmp = line;
-    closes = gsub(/\}/, "}", tmp);
+    opens = 0;
+    closes = 0;
+    if (line !~ /^[[:space:]]*#/ && !is_comment_line(line)) {
+        tmp = line;
+        opens = gsub(/\{/, "{", tmp);
+        tmp = line;
+        closes = gsub(/\}/, "}", tmp);
+    }
 
     if (opens > 0) {
         for (k = 1; k <= opens; k++) {
@@ -680,7 +1136,7 @@ function is_decl_line(s,    t) {
             block_init[d] = 1;
             decl_mode[d] = 1;
             saw_decl[d] = 0;
-            pending_blank[d] = 0;
+            saw_blank[d] = 0;
         }
     }
 
@@ -688,21 +1144,41 @@ function is_decl_line(s,    t) {
     if (brace_depth < 0)
         brace_depth = 0;
 }
-' "$tmp_split" > "$tmp_final"; then
+' "$tmp_hoist" > "$tmp_final"; then
         warn "failed to apply function-body spacing rules in '$file_path'."
         return 2
     fi
 
-    if cmp -s "$file_path" "$tmp_final"; then
+    tmp_clean="$(mktemp)" || {
+        warn "failed to create cleanup temporary file for '$file_path'."
+        return 2
+    }
+    tmp_files+=("$tmp_clean")
+
+    if ! awk '
+{
+    line = $0;
+    sub(/[ \t]+$/, "", line);
+    if (line ~ /^[[:space:]]*$/)
+        print "";
+    else
+        print line;
+}
+' "$tmp_final" > "$tmp_clean"; then
+        warn "failed to clean trailing whitespace in '$file_path'."
+        return 2
+    fi
+
+    if cmp -s "$file_path" "$tmp_clean"; then
         return 1
     fi
 
-    if ! chmod --reference="$file_path" "$tmp_final"; then
+    if ! chmod --reference="$file_path" "$tmp_clean"; then
         warn "failed to preserve permissions for '$file_path'."
         return 2
     fi
 
-    if ! mv "$tmp_final" "$file_path"; then
+    if ! mv "$tmp_clean" "$file_path"; then
         warn "failed to replace '$file_path'."
         return 2
     fi
@@ -710,10 +1186,11 @@ function is_decl_line(s,    t) {
     return 0
 }
 
-if is_config_mode "$@"; then
-    configure_only "$@"
-    exit 0
-fi
+for arg in "$@"; do
+    if [[ "$arg" == *=* ]]; then
+        die "configuration arguments are disabled. Edit '$config_file' and rerun."
+    fi
+done
 
 if [[ $# -ne 1 ]]; then
     usage

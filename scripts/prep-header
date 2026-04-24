@@ -12,9 +12,9 @@ warn() {
 }
 
 usage() {
-    echo "Usage: $0 [scripts=<path> code=<path>] <folder>" >&2
+    echo "Usage: $0 <folder>" >&2
     echo "Examples:" >&2
-    echo "  $0 scripts=./scripts code=./code username=lanusri- email=lanusri-@student.42kl.edu.my" >&2
+    echo "  Fill scripts/prep.config first (SCRIPTS_DIR and CODE_DIR)." >&2
     echo "  $0 c-01" >&2
 }
 
@@ -77,16 +77,16 @@ is_config_mode() {
 }
 
 load_config() {
-    code_root_raw="${CODE_ROOT:-$PWD}"
-    code_root="$code_root_raw"
+    [[ -f "$config_file" ]] || die "missing '$config_file'. Fill SCRIPTS_DIR and CODE_DIR first."
 
-    if [[ -f "$config_file" ]]; then
-        # shellcheck disable=SC1090
-        source "$config_file"
-    fi
+    # shellcheck disable=SC1090
+    source "$config_file"
 
-    code_root="${CODE_DIR:-$code_root}"
-    code_root="$(abs_dir "$code_root")" || die "CODE_ROOT '$code_root' is not a readable directory."
+    [[ -n "${SCRIPTS_DIR:-}" ]] || die "SCRIPTS_DIR is not set in '$config_file'."
+    [[ -n "${CODE_DIR:-}" ]] || die "CODE_DIR is not set in '$config_file'."
+
+    abs_dir "$SCRIPTS_DIR" >/dev/null || die "SCRIPTS_DIR '$SCRIPTS_DIR' is not a readable directory."
+    code_root="$(abs_dir "$CODE_DIR")" || die "CODE_DIR '$CODE_DIR' is not a readable directory."
 }
 
 write_config() {
@@ -349,10 +349,11 @@ process_file() {
     return 0
 }
 
-if is_config_mode "$@"; then
-    configure_only "$@"
-    exit 0
-fi
+for arg in "$@"; do
+    if [[ "$arg" == *=* ]]; then
+        die "configuration arguments are disabled. Edit '$config_file' and rerun."
+    fi
+done
 
 if [[ $# -ne 1 ]]; then
     usage

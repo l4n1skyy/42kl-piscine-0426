@@ -8,9 +8,9 @@ die() {
 }
 
 usage() {
-	echo "Usage: $0 [scripts=<path> code=<path>] <module/file.c | folder>" >&2
+	echo "Usage: $0 <module/file.c | folder>" >&2
 	echo "Examples:" >&2
-	echo "  $0 scripts=./scripts code=./code username=lanusri- email=lanusri-@student.42kl.edu.my" >&2
+	echo "  Fill scripts/prep.config first (SCRIPTS_DIR and CODE_DIR)." >&2
 	echo "  $0 c-01/ft_ft.c" >&2
 	echo "  $0 c-01" >&2
 }
@@ -83,16 +83,16 @@ is_config_mode() {
 }
 
 load_config() {
-	code_root_raw="${CODE_ROOT:-$PWD}"
-	code_root="$code_root_raw"
+	[[ -f "$config_file" ]] || die "missing '$config_file'. Fill SCRIPTS_DIR and CODE_DIR first."
 
-	if [[ -f "$config_file" ]]; then
-		# shellcheck disable=SC1090
-		source "$config_file"
-	fi
+	# shellcheck disable=SC1090
+	source "$config_file"
 
-	code_root="${CODE_DIR:-$code_root}"
-	code_root="$(abs_dir "$code_root")" || die "CODE_ROOT '$code_root' is not a readable directory."
+	[[ -n "${SCRIPTS_DIR:-}" ]] || die "SCRIPTS_DIR is not set in '$config_file'."
+	[[ -n "${CODE_DIR:-}" ]] || die "CODE_DIR is not set in '$config_file'."
+
+	abs_dir "$SCRIPTS_DIR" >/dev/null || die "SCRIPTS_DIR '$SCRIPTS_DIR' is not a readable directory."
+	code_root="$(abs_dir "$CODE_DIR")" || die "CODE_DIR '$CODE_DIR' is not a readable directory."
 }
 
 write_config() {
@@ -177,25 +177,34 @@ BEGIN {
 	capture = 0;
 	depth = 0;
 	saw_open = 0;
+	found_main = 0;
 }
 {
-	if (!capture && $0 ~ /^[[:space:]]*int[[:space:]]+main[[:space:]]*[(]/)
+	line = $0;
+	sub(/\/\/.*/, "", line);
+	sub(/[ \t]+$/, "", line);
+
+	if (!capture && line ~ /^[[:space:]]*int[[:space:]]+main[[:space:]]*[(]/) {
 		capture = 1;
-	if (capture) {
-		print $0;
-		line = $0;
-		open_count = gsub(/\{/, "{", line);
-		line = $0;
-		close_count = gsub(/\}/, "}", line);
-		depth += open_count - close_count;
-		if (open_count > 0)
-			saw_open = 1;
-		if (saw_open && depth == 0)
-			exit;
+		found_main = 1;
 	}
+
+	# Keep everything up to the end of main(), including pre-main includes/defines.
+	print line;
+
+	if (!capture)
+		next;
+
+	open_count = gsub(/\{/, "{", line);
+	close_count = gsub(/\}/, "}", line);
+	depth += open_count - close_count;
+	if (open_count > 0)
+		saw_open = 1;
+	if (saw_open && depth == 0)
+		exit;
 }
 END {
-	if (!capture || !saw_open || depth != 0)
+	if (!found_main || !saw_open || depth != 0)
 		exit 1;
 }
 ' "$from_main" > "$tmp_main"; then
@@ -208,7 +217,41 @@ END {
 file_has_active_main() {
 	local f="$1"
 
-	grep -Eq '^[[:space:]]*int[[:space:]]+main[[:space:]]*[(]' "$f"
+	awk '
+BEGIN {
+	in_block = 0;
+	found = 0;
+}
+{
+	line = $0;
+	work = line;
+	if (in_block) {
+		if (sub(/^.*\*\//, "", work))
+			in_block = 0;
+		else
+			next;
+	}
+	while (1) {
+		if (sub(/\/\*.*\*\//, "", work))
+			continue;
+		if (match(work, /\/\*/)) {
+			work = substr(work, 1, RSTART - 1);
+			in_block = 1;
+		}
+		break;
+	}
+	sub(/\/\/.*/, "", work);
+	if (work ~ /^[[:space:]]*int[[:space:]]+main[[:space:]]*\(/) {
+		found = 1;
+		exit;
+	}
+}
+END {
+	if (found)
+		exit 0;
+	exit 1;
+}
+' "$f"
 }
 
 comment_main_in_file() {
@@ -221,7 +264,8 @@ comment_main_in_file() {
 	[[ -w "$(dirname "$target_file")" ]] || die "directory '$(dirname "$target_file")' is not writable."
 
 	if ! file_has_active_main "$target_file"; then
-		die "no external main.c found and no active main() found in '$target_file'."
+		echo "No active main() found in '$target_file'; skipping in-file main comment step."
+		return 0
 	fi
 
 	tmp_target="$(mktemp)" || die "failed to create temporary output file."
@@ -235,12 +279,31 @@ BEGIN {
 	done = 0;
 	skip_after = 0;
 	out_count = 0;
+		in_block = 0;
 }
 function emit(s) {
 	out[++out_count] = s;
 }
 {
-	if (!capture && !done && $0 ~ /^[[:space:]]*int[[:space:]]+main[[:space:]]*[(]/)
+		line_for_check = $0;
+		if (in_block) {
+			if (sub(/^.*\*\//, "", line_for_check))
+				in_block = 0;
+			else
+				line_for_check = "";
+		}
+		while (!capture && !done && line_for_check != "") {
+			if (sub(/\/\*.*\*\//, "", line_for_check))
+				continue;
+			if (match(line_for_check, /\/\*/)) {
+				line_for_check = substr(line_for_check, 1, RSTART - 1);
+				in_block = 1;
+			}
+			break;
+		}
+		sub(/\/\/.*/, "", line_for_check);
+
+		if (!capture && !done && line_for_check ~ /^[[:space:]]*int[[:space:]]+main[[:space:]]*[(]/)
 		{
 			while (out_count > 0 && out[out_count] ~ /^[[:space:]]*$/)
 				out_count--;
@@ -248,10 +311,13 @@ function emit(s) {
 			emit("/*");
 		}
 	if (capture) {
-		emit($0);
 		line = $0;
+		sub(/\/\/.*/, "", line);
+		sub(/[ \t]+$/, "", line);
+		emit(line);
+		line = line;
 		open_count = gsub(/\{/, "{", line);
-		line = $0;
+		line = line;
 		close_count = gsub(/\}/, "}", line);
 		depth += open_count - close_count;
 		if (open_count > 0)
@@ -506,10 +572,11 @@ resolve_folder() {
 	die "folder '$input_path' not found."
 }
 
-if is_config_mode "$@"; then
-	configure_only "$@"
-	exit 0
-fi
+for arg in "$@"; do
+	if [[ "$arg" == *=* ]]; then
+		die "configuration arguments are disabled. Edit '$config_file' and rerun."
+	fi
+done
 
 if [[ $# -ne 1 ]]; then
 	usage
@@ -563,7 +630,8 @@ for target_file in "${inline_main_files[@]}"; do
 done
 
 if [[ $processed -eq 0 ]]; then
-	die "no processable main() found under '$target_folder'."
+	echo "No processable main() found under '$target_folder'; nothing to do."
+	exit 0
 fi
 
 echo "Processed $processed exercise file(s) under '$target_folder'."

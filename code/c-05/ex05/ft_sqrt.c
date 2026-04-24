@@ -1,0 +1,16 @@
+int	ft_sqrt(int nb);
+
+int	ft_sqrt(int nb)
+{
+	int	n;
+	if (nb <= 0)
+		return (0);
+	if (nb == 1)
+		return (1)
+	while (n * n < nb && n <= 46340)
+		n++;
+	if (n * n == nb)
+		return (n);
+	else
+		return (0);
+}
