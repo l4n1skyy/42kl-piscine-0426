@@ -110,7 +110,7 @@ int ft_validate_base(char *base)
 			return (0);
 		
 		// if whitespace
-		if (base[i] == 32 || base[i] >= 9 && base[i] <= 13)
+		if (base[i] == 32 || (base[i] >= 9 && base[i] <= 13))
 			return (0);
 		
 		// if duplicate
