@@ -13,6 +13,9 @@ char *ft_convert_base(char *nbr, char *base_from, char *base_to)
 	// convert base x -> base 10
 	long nbr_base_ten = ft_base_to_ten(nbr, base_from, base_from_size);
 	
+	if (nbr_base_ten == 0)
+		sign = 1;
+
 	// convert base 10 -> base x
 	int base_to_len = ft_base_to_len(nbr_base_ten, base_to_size) + 1 + (1 - sign) / 2;
 	char *nbr_base_to = malloc(base_to_len);
@@ -51,7 +54,7 @@ long ft_base_to_len(long nbr, int base_size)
 	return (digits);
 }
 
-int ft_base_to_ten(char *nbr, char *base, int base_size)
+long ft_base_to_ten(char *nbr, char *base, int base_size)
 {
 	long total = 0;
 	int i = 0;
@@ -72,7 +75,7 @@ char *ft_validate_nbr(int *sign, char *nbr, char *base)
 	char *read = nbr;
 
 	// while whitespace
-	while (*read == 32 || *read >= 9 && *read <= 13)
+	while (*read == 32 || (*read >= 9 && *read <= 13))
 		read++;
 	// while sign
 	while (*read == '+' || *read == '-')
