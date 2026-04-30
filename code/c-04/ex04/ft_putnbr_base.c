@@ -46,7 +46,6 @@ int	get_base_len(char *base_str)
 	i = 0;
 	while (base_str[i])
 		i++;
-
 	return i;
 }
 
