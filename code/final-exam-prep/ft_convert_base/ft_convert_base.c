@@ -4,56 +4,48 @@ char *ft_convert_base(char *nbr, char *base_from, char *base_to)
 	int base_from_size = ft_validate_base(base_from);
 	int base_to_size = ft_validate_base(base_to);
 
-	if (!base_from_size || ! base_to_size)
+	if (!base_from_size || !base_to_size)
 		return (NULL);
 
 	int sign = 1;
 	nbr = ft_validate_nbr(&sign, nbr, base_from);
 
-	// convert
-	int nbr_base_ten = ft_base_to_ten(nbr, base_from, base_from_size);
+	// convert base x -> base 10
+	long nbr_base_ten = ft_base_to_ten(nbr, base_from, base_from_size);
 	
+	// convert base 10 -> base x
 	int base_to_len = ft_base_to_len(nbr_base_ten, base_to_size) + 1 + (1 - sign) / 2;
 	char *nbr_base_to = malloc(base_to_len);
-	ft_ten_to_base(nbr_base_ten, base_to, base_to_size, nbr_base_to, base_to_len);
+	
+	if (!nbr_base_to)
+		return (NULL);
+
+	ft_ten_to_base(nbr_base_ten, base_to, base_to_size, nbr_base_to + base_to_len - 2);
+	nbr_base_to[base_to_len - 1] = '\0';
+
+	// add sign
 	if (sign < 0)
 		*nbr_base_to = '-';
 
+	// return result ptr
 	return (nbr_base_to);
 }
 
-void	ft_ten_to_base(int nbr, char *base, int base_size, char *res, int len)
+void	ft_ten_to_base(long nbr, char *base, int size, char *res)
 {
-	len--;
-
-	if (nbr == 0)
-	{
-		res[0] = base[0];
-		res[1] = '\0';
-		return;
-	}
-
-	// add terminator
-	res[len] = '\0';
-	len--;
-
-	while (nbr > 0)
-	{
-		res[len] = base[nbr % base_size];
-		nbr /= base_size;
-		len--;
-	}
+	if (nbr >= size)
+		ft_ten_to_base(nbr / size, base, size, res - 1);
+	*res = base[nbr % size];
 }
 
-// handle int min???
-int ft_base_to_len(int nbr_base_ten, int base_size)
+long ft_base_to_len(long nbr, int base_size)
 {
-	if (nbr_base_ten == 0)
+	if (nbr == 0)
 		return (1);
 	int digits = 0;
-	while (nbr_base_ten > 0)
+	while (nbr > 0)
 	{
-		nbr_base_ten /= base_size;
+		nbr /= base_size;
 		digits++;
 	}
 	return (digits);
@@ -61,11 +53,13 @@ int ft_base_to_len(int nbr_base_ten, int base_size)
 
 int ft_base_to_ten(char *nbr, char *base, int base_size)
 {
-	int total = 0;
+	long total = 0;
 	int i = 0;
 	while (nbr[i])
 	{
 		int index = ft_strchr(nbr[i], base);
+		if (index < 0)
+			return (total);
 		total = (total * base_size) + index;
 		i++;
 	}
@@ -87,16 +81,7 @@ char *ft_validate_nbr(int *sign, char *nbr, char *base)
 			*sign *= -1;
 		read++;
 	}
-
-	// while nbr
-	nbr = read;
-	while (*read && ft_strchr(*read, base) >= 0)
-		read++;
-
-	// cut off excess stuff that isnt nbr
-	*read = '\0';
-
-	return (nbr);
+	return (read);
 }
 
 int ft_strchr(char c, char *str)
